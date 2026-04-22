@@ -51,7 +51,7 @@ spring:
     openai:
       # 阿里百炼 DashScope OpenAI 兼容接口（不要加 /v1，Spring AI 会自动追加）
       base-url: https://dashscope.aliyuncs.com/compatible-mode
-      api-key: sk-537fe04bb20444758dd760331a8e599b
+      api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
           model: qwen-max
