@@ -1,0 +1,47 @@
+---
+description: Java 21 编码规范与 Spring Boot 4.x 开发约定
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Java 编码规范
+
+## JDK 21 特性优先
+
+- 使用 Record 替代简单 DTO：`public record ChatRequest(String message, String sessionId) {}`
+- 使用 Sealed Classes 定义受限类型层级
+- 使用 Pattern Matching：`if (obj instanceof String s)` 和 switch 模式匹配
+- 使用 Text Block 编写多行字符串（SQL、Prompt 模板）
+- 启用虚拟线程处理高并发 IO（`spring.threads.virtual.enabled=true`）
+
+## 命名规范
+
+- 包名：`com.yourcompany.aiapp.{layer}`（config/controller/service/advisor/tool/model/repository）
+- 类名：大驼峰，按职责后缀命名
+  - Controller: `ChatController`, `DocumentController`
+  - Service: `ChatService`, `RagService`, `EmbeddingService`
+  - Advisor: `MemoryAdvisor`, `RagContextAdvisor`
+  - Tool: `WeatherTool`, `DatabaseQueryTool`
+  - Config: `AiModelConfig`, `VectorStoreConfig`
+  - DTO: `ChatRequest`, `ChatResponse`（使用 Record）
+  - Entity: `Conversation`, `Document`
+- 方法名：小驼峰，动词开头（`chat()`, `ingestDocument()`, `searchSimilar()`）
+
+## 异常处理
+
+- 使用 `@RestControllerAdvice` 全局异常处理
+- 自定义业务异常继承 `RuntimeException`
+- AI 调用失败使用 Spring AI 内置重试机制（`spring-ai-retry`）
+- 禁止空 catch 块，必须记录日志或重新抛出
+
+## 依赖注入
+
+- 优先使用构造器注入（不使用 `@Autowired`）
+- 配置类使用 `@Configuration` + `@Bean`
+- 属性绑定使用 `@ConfigurationProperties`
+
+## 日志
+
+- 使用 SLF4J + Logback
+- 日志级别：ERROR（系统错误）、WARN（业务异常）、INFO（关键流程）、DEBUG（调试信息）
+- AI 调用日志包含：模型名称、token 用量、响应耗时

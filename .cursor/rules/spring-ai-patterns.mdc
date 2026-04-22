@@ -1,0 +1,100 @@
+---
+description: Spring AI 开发模式与最佳实践（ChatClient、Advisor、RAG、Tool Calling）
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Spring AI 开发模式
+
+## ChatClient 使用
+
+使用 `ChatClient` 作为与 LLM 交互的统一入口，而非直接使用底层 `ChatModel`：
+
+```java
+@Service
+public class ChatService {
+    private final ChatClient chatClient;
+
+    public ChatService(ChatClient.Builder builder) {
+        this.chatClient = builder
+            .defaultSystem("你是一个专业的AI助手")
+            .defaultAdvisors(new MessageChatMemoryAdvisor(chatMemory))
+            .build();
+    }
+
+    public Flux<String> streamChat(String userMessage, String sessionId) {
+        return chatClient.prompt()
+            .user(userMessage)
+            .advisors(a -> a.param("chat_memory_conversation_id", sessionId))
+            .stream()
+            .content();
+    }
+}
+```
+
+## Advisor 模式
+
+通过 Advisor 链式增强对话，按职责拆分：
+- `MessageChatMemoryAdvisor` — 对话记忆管理
+- `QuestionAnswerAdvisor` — RAG 上下文注入
+- 自定义 Advisor 实现 `CallAroundAdvisor` 或 `StreamAroundAdvisor`
+
+Advisor 注册顺序决定执行顺序，使用 `getOrder()` 控制优先级。
+
+## Tool Calling（Function Calling）
+
+使用 `@Tool` 注解声明可供 LLM 调用的工具方法：
+
+```java
+@Component
+public class WeatherTool {
+    @Tool(description = "根据城市名称查询当前天气信息")
+    public WeatherInfo getWeather(@ToolParam(description = "城市名称") String city) {
+        return weatherService.query(city);
+    }
+}
+```
+
+工具方法要求：
+- 方法必须有清晰的 `description` 描述其功能
+- 参数使用 `@ToolParam` 注解说明含义
+- 返回值使用 Record 或简单 POJO，Spring AI 自动序列化为 JSON
+
+## RAG 流程
+
+标准 RAG 实现步骤：
+1. **文档摄取**：`DocumentReader` → `TextSplitter` → `EmbeddingModel` → `VectorStore`
+2. **检索增强**：`QuestionAnswerAdvisor` + `VectorStore` 自动检索相关文档
+3. **生成回答**：ChatClient 将检索到的上下文注入 Prompt
+
+```java
+@Bean
+public ChatClient ragChatClient(ChatClient.Builder builder, VectorStore vectorStore) {
+    return builder
+        .defaultAdvisors(new QuestionAnswerAdvisor(vectorStore))
+        .build();
+}
+```
+
+## Prompt 模板
+
+Prompt 模板放在 `src/main/resources/prompts/` 目录，使用 `.st`（StringTemplate）格式：
+
+```
+你是一个{role}。请根据以下上下文回答用户问题：
+上下文：{context}
+用户问题：{question}
+```
+
+通过 `PromptTemplate` 或 `@Value("classpath:prompts/xxx.st")` 加载。
+
+## 流式响应
+
+Controller 层使用 `Flux<String>` + SSE 实现流式输出：
+
+```java
+@GetMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public Flux<String> streamChat(@RequestParam String message) {
+    return chatService.streamChat(message);
+}
+```

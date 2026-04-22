@@ -1,0 +1,72 @@
+server:
+  port: 8887
+spring:
+  application:
+    name: my-ai-cursor
+
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+      force-response: true
+
+  datasource:
+    url: jdbc:mariadb://10.22.36.120:8833/ai_chat?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 5F52uA8npe
+    driver-class-name: org.mariadb.jdbc.Driver
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  threads:
+    virtual:
+      enabled: true
+
+  ai:
+    model:
+      chat: openai
+      embedding: ollama
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: never
+
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        options:
+          model: bge-m3:latest
+
+    vectorstore:
+      mariadb:
+        initialize-schema: true
+        distance-type: COSINE
+        dimensions: 1024
+        table-name: vector_store
+        schema-validation: false
+
+    openai:
+      # 阿里百炼 DashScope OpenAI 兼容接口（不要加 /v1，Spring AI 会自动追加）
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: sk-537fe04bb20444758dd760331a8e599b
+      chat:
+        options:
+          model: qwen-max
+          temperature: 0.7
+          max-tokens: 2048
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  memory:
+    short-term:
+      enabled: true
+      window-size: 12
+    long-term:
+      enabled: true
+      recall-limit: 5

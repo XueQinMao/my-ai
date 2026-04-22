@@ -1,0 +1,72 @@
+---
+description: Spring AI 项目架构总览与技术栈规范，定义项目结构、依赖版本、分层架构
+alwaysApply: true
+---
+
+# Spring AI 项目规范
+
+## 技术栈
+
+- JDK: 21（启用虚拟线程）
+- Spring Boot: 4.0.3
+- Spring Framework: 7.x
+- Spring AI: 2.0.0-M2（基于 Spring Boot 4.x，GA 版本预计 2026 年 5 月发布，届时应升级）
+- Jakarta EE: 11
+- 构建工具: Maven 3.8+
+- 数据库: PostgreSQL + pgvector（向量与业务数据共库）
+
+## 项目目录结构
+
+```
+src/main/java/com/yourcompany/aiapp/
+├── config/          # 配置类（AI模型、向量库、安全、限流）
+├── controller/      # REST 控制器（聊天、文档、Agent 接口）
+├── service/         # 业务逻辑层（ChatService、RagService、EmbeddingService 等）
+├── advisor/         # Spring AI Advisor（对话记忆、RAG 上下文增强、日志）
+├── tool/            # Function Calling 工具定义（@Tool 注解）
+├── model/
+│   ├── dto/         # 请求/响应数据传输对象
+│   └── entity/      # JPA 实体
+├── repository/      # 数据访问层（Spring Data JPA）
+└── Application.java # 启动类
+
+src/main/resources/
+├── application.yml          # 主配置
+├── application-dev.yml      # 开发环境
+├── application-prod.yml     # 生产环境
+├── prompts/                 # Prompt 模板（.st 文件）
+└── documents/               # 知识库文档（开发用）
+```
+
+## 分层架构
+
+1. **Controller 层** — 接收 HTTP 请求，支持 SSE 流式响应
+2. **Service 层** — 核心业务逻辑，调用 ChatClient、编排 RAG 流程
+3. **Advisor 层** — 拦截并增强对话请求/响应（记忆、上下文、日志）
+4. **Tool 层** — 定义可被 LLM 调用的外部工具（Function Calling）
+5. **Repository 层** — 数据持久化，含 VectorStore 操作
+
+## Maven 依赖管理
+
+使用 Spring AI BOM 统一管理版本，按需引入 starter：
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-bom</artifactId>
+            <version>2.0.0-M2</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+常用 starter：
+- `spring-ai-starter-model-openai` — OpenAI 模型
+- `spring-ai-starter-model-ollama` — Ollama 本地模型
+- `spring-ai-starter-model-anthropic` — Anthropic 模型
+- `spring-ai-starter-vector-store-pgvector` — PGVector 向量存储
+- `spring-ai-starter-mcp-client` — MCP 客户端

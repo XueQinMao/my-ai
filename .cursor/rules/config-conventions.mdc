@@ -1,0 +1,74 @@
+---
+description: Spring AI 配置文件与资源文件规范
+globs: "src/main/resources/**/*.{yml,yaml,properties,st}"
+alwaysApply: false
+---
+
+# 配置文件规范
+
+## 多环境配置
+
+- `application.yml` — 公共配置（不含敏感信息）
+- `application-dev.yml` — 开发环境（本地 Ollama、H2/内嵌 PG）
+- `application-prod.yml` — 生产环境（云端 API Key 通过环境变量注入）
+
+敏感信息（API Key、数据库密码）禁止硬编码，使用环境变量：
+
+```yaml
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+```
+
+## Spring AI 核心配置项
+
+```yaml
+spring:
+  threads:
+    virtual:
+      enabled: true    # 启用虚拟线程
+
+  ai:
+    # 模型配置
+    openai:
+      chat:
+        options:
+          model: gpt-4o
+          temperature: 0.7
+          max-tokens: 4096
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen2.5
+
+    # 向量存储
+    vectorstore:
+      pgvector:
+        dimensions: 1536
+        index-type: hnsw
+        distance-type: cosine_distance
+
+    # 重试策略
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval: 1000
+        multiplier: 2
+```
+
+## Prompt 模板文件
+
+- 路径：`src/main/resources/prompts/`
+- 格式：StringTemplate（`.st` 扩展名）
+- 命名：`{功能}-prompt.st`（如 `rag-prompt.st`、`system-prompt.st`）
+- 模板变量使用 `{varName}` 占位符
+
+## Docker Compose 开发环境
+
+项目根目录提供 `docker-compose.yml`，至少包含：
+- PostgreSQL + pgvector 扩展（向量存储 + 业务数据）
+- Redis（可选，用于对话记忆/缓存）
+- Ollama（可选，本地模型推理）
