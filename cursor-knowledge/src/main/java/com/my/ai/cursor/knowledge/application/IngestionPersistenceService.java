@@ -1,4 +1,4 @@
-package com.my.ai.cursor.knowledge.application.ingestion.persistence;
+package com.my.ai.cursor.knowledge.application;
 
 import com.alibaba.fastjson.JSON;
 import com.my.ai.cursor.knowledge.application.pojo.comtext.IngestionContext;

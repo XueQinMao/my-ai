@@ -29,7 +29,7 @@ public class ShortTermMemoryService {
      * @param overrideLimit
      * @return
      */
-    public String generateShortMemoryContext(String conversationId, Integer overrideLimit) {
+    public String generateShortMemoryContext(String conversationId, int overrideLimit) {
         if (!appMemoryProperties.getShortTerm().isEnabled() || !StringUtils.hasText(conversationId)) {
             return null;
         }
@@ -39,7 +39,7 @@ public class ShortTermMemoryService {
             return null;
         }
         // ChatMemory 可能保留比当前请求更多的窗口消息，这里允许按请求临时裁剪。
-        int limit = (overrideLimit == null || overrideLimit <= 0) ? appMemoryProperties.getShortTerm().getWindowSize()
+        int limit = overrideLimit <= 0 ? appMemoryProperties.getShortTerm().getWindowSize()
             : overrideLimit;
         int fromIndex = Math.max(0, messages.size() - limit);
         List<Message> messagesData = messages.subList(fromIndex, messages.size());

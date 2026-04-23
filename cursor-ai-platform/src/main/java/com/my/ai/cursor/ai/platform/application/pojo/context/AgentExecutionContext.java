@@ -11,11 +11,11 @@ public record AgentExecutionContext(
     int maxToolCallsPerRun
 ) {
 
-    public static AgentExecutionContext of(String runId, String userId, String sessionId, AiScene scene) {
-        return new AgentExecutionContext(runId, userId, sessionId, scene, 100, 10);
+    public static AgentExecutionContext of(String runId, String userId, String sessionId) {
+        return new AgentExecutionContext(runId, userId, sessionId, AiScene.AGENT_CHAT, 100, 10);
     }
-    public static AgentExecutionContext of(String runId, String userId, String sessionId, AiScene scene, int maxSteps,
+    public static AgentExecutionContext of(String runId, String userId, String sessionId, int maxSteps,
         int maxToolCallsPerRun) {
-        return new AgentExecutionContext(runId, userId, sessionId, scene, maxSteps, maxToolCallsPerRun);
+        return new AgentExecutionContext(runId, userId, sessionId, AiScene.AGENT_CHAT, maxSteps, maxToolCallsPerRun);
     }
 }

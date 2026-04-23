@@ -1,5 +1,6 @@
 package com.my.ai.cursor.knowledge.application.ingestion.pipeline;
 
+import com.my.ai.cursor.common.utils.DigestUtil;
 import com.my.ai.cursor.knowledge.application.PipelineStep;
 import com.my.ai.cursor.knowledge.application.pojo.comtext.IngestionContext;
 import com.my.ai.cursor.knowledge.domain.KnowledgeRepository;
@@ -27,7 +28,7 @@ public class CheckProcessing implements PipelineStep<IngestionContext, Ingestion
 
     @Override
     public IngestionContext execute(IngestionContext input) {
-        String checksum = sha256(input.getExtractedText());
+        String checksum = DigestUtil.sha256(input.getExtractedText());
         input.setChecksum(checksum);
         Optional<Long> documentIdByChecksum = knowledgeRepository.findDocumentIdByChecksum(checksum);
         if(documentIdByChecksum.isPresent()){
@@ -39,19 +40,5 @@ public class CheckProcessing implements PipelineStep<IngestionContext, Ingestion
     @Override
     public int order() {
         return 1;
-    }
-
-    private String sha256(String content) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm unavailable", e);
-        }
     }
 }

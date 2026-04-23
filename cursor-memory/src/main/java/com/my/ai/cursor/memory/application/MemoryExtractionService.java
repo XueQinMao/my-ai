@@ -5,20 +5,18 @@ import com.my.ai.cursor.ai.platform.application.AiGatewayService;
 import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.common.enums.MemoryStatus;
 import com.my.ai.cursor.common.enums.MemoryType;
+import com.my.ai.cursor.common.utils.DigestUtil;
 import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
 import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteCommand;
 import com.my.ai.cursor.memory.pojo.dto.MemoryExtractAiDto;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.template.st.StTemplateRenderer;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.stream.Stream;
+import java.util.*;
 
 @Service
 public class MemoryExtractionService {
@@ -29,37 +27,53 @@ public class MemoryExtractionService {
         this.aiGatewayService = aiGatewayService;
     }
 
-    public List<AgentMemory> extract(ChatMemoryWriteCommand command) {
+    public List<AgentMemory> extract(ChatMemoryWriteCommand command, Set<String> normalizedKeySet) {
 
-        var promptTemplate = new PromptTemplate("""
-            你是记忆提取专家。请从以下对话中提取关键记忆，并评估其质量。
-                用户消息：{userMessage}
-                AI 回答：{assistantMessage}
-                请返回 JSON 格式,不要包含任何其他文字说明,包含如下内容：
-                    - summary: 简短摘要
-                    - importance: 0.85,   // 0.0-1.0，对用户未来对话的影响程度
-                    - confidence: 0.92,  // 0.0-1.0，提取结果的准确确信度
-                评分标准：
-                - importance: 偏好(0.8-1.0), 关键事实(0.6-0.8), 普通信息(0.3-0.6)
-                - confidence: 明确表达(0.9-1.0), 推断得出(0.6-0.9), 模糊不清(0.3-0.6)
-            """);
+        var promptTemplate = PromptTemplate.builder()
+            .renderer(StTemplateRenderer.builder().startDelimiterToken('<').endDelimiterToken('>').build()).template("""
+                你是记忆提取专家。请分析以下对话，提取所有有价值的长期记忆。
+                   【用户消息】
+                   <userMessage>
+                   【AI 回答】
+                    <assistantMessage>
+                   【提取要求】
+                     1. 识别用户偏好 (PREFERENCE)：如语言喜好、回答风格、饮食禁忌、兴趣爱好等。
+                     2. 识别关键事实 (FACT)：如用户的职业、年龄、家庭状况、健康指标等。
+                     3. 生成本轮摘要 (SESSION_SUMMARY)：对本轮对话核心内容的简短概括。
+                   【输出格式】
+                     请严格返回 JSON格式，不要包含 Markdown 标记或其他文字,格式如下：
+                     {
+                         "memories": [
+                           {
+                             "type": "PREFERENCE",
+                             "summary": "偏好中文与简洁风格",
+                             "importance": 0.9,
+                             "confidence": 0.95
+                           }
+                         ]
+                       }
+                   【评分标准】
+                     1. importance (0.0-1.0): 偏好和关键事实通常较高 (0.7+)，普通闲聊较低。
+                     2. confidence (0.0-1.0): 用户明确表达的给高分，推断的给低分。
+                """).build();
 
         var aiDto = aiGatewayService.chat(AiScene.MEMORY_EXTRACTION, promptTemplate.create(
                 Map.of("userMessage", command.userMessage(), "assistantMessage", command.assistantMessage())),
             MemoryExtractAiDto.class);
 
-        return Stream.of(buildSessionSummary(command, aiDto), extractLanguagePreference(command),
-            extractResponseStylePreference(command)).filter(Objects::nonNull).toList();
+        return Optional.ofNullable(aiDto).map(MemoryExtractAiDto::getMemories).orElse(Collections.emptyList()).stream()
+            .map(memorie -> buildSessionSummary(command, memorie))
+            .filter(memory -> !normalizedKeySet.contains(memory.getNormalizedKey())).toList();
     }
 
-    private AgentMemory buildSessionSummary(ChatMemoryWriteCommand command, MemoryExtractAiDto aiDto) {
-        AgentMemory memory = baseMemory(command, MemoryType.SESSION_SUMMARY,
-            "session-summary:" + command.sessionId() + ":" + command.sourceMessageId());
-        memory.setContent("本轮用户问题：" + command.userMessage() + "；本轮回答摘要：" + aiDto.getSummary());
-        memory.setSummary(aiDto.getSummary());
-        memory.setImportance(aiDto.getImportance());
-        memory.setConfidence(aiDto.getConfidence());
-        memory.setMetadataJson(JSON.toJSONString(Map.of("source", "exchange-summary")));
+    private AgentMemory buildSessionSummary(ChatMemoryWriteCommand command, MemoryExtractAiDto.Memorie memorie) {
+        AgentMemory memory = baseMemory(command, Enum.valueOf(MemoryType.class, memorie.getType()),
+            DigestUtil.sha256(memorie.getSummary()));
+        memory.setContent("本轮用户问题：" + command.userMessage() + "；本轮回答摘要：" + memorie.getSummary());
+        memory.setSummary(memorie.getSummary());
+        memory.setImportance(memorie.getImportance());
+        memory.setConfidence(memorie.getConfidence());
+        memory.setMetadataJson(JSON.toJSONString(Map.of("type", memorie.getType())));
         return memory;
     }
 
@@ -101,7 +115,7 @@ public class MemoryExtractionService {
     }
 
     private AgentMemory preferenceMemory(ChatMemoryWriteCommand command, String normalizedKey, String content,
-                                         String summary) {
+        String summary) {
         AgentMemory memory = baseMemory(command, MemoryType.PREFERENCE, normalizedKey);
         memory.setContent(content);
         memory.setSummary(summary);

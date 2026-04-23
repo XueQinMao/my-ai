@@ -36,28 +36,6 @@ public class KnowledgeSearchService {
         return docs.stream().map(this::convertToHit).toList();
     }
 
-    public String generateRagContext(String query, int topK) {
-        List<KnowledgeSearchHit> hits = search(new KnowledgeSearchRequest(query, topK, null));
-
-        AtomicInteger index = new AtomicInteger(1);
-        return Optional.ofNullable(hits).orElse(Collections.emptyList()).stream().map(hit -> formatHit(hit, index))
-            .collect(Collectors.joining("\n\n"));
-    }
-
-    private String formatHit(KnowledgeSearchHit hit, AtomicInteger index) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("片段").append(index.getAndIncrement()).append("：")
-            .append(hit.title() == null ? "unknown" : hit.title())
-            .append('\n');
-
-        if (StringUtils.hasText(hit.sourceUrl())) {
-            sb.append("来源URL: ").append(hit.sourceUrl()).append('\n');
-        }
-
-        sb.append(hit.content());
-        return sb.toString();
-    }
-
     private KnowledgeSearchHit convertToHit(Document doc) {
         Map<String, Object> metadata = doc.getMetadata();
         Double score = doc.getScore();

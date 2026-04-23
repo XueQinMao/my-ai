@@ -9,11 +9,13 @@ public record AgentChatResponse(
     String runId,
     String userId,
     String sessionId,
-    String scene,
     AgentRunStatus status,
     String content,
-    int toolCallCount,
     List<AgentToolTraceDto> toolTraces,
     String errorMessage
 ) {
+
+    public static AgentChatResponse of(String runId, String userId, String sessionId, AgentRunStatus status, String content, List<AgentToolTraceDto> toolTraces, String errorMessage) {
+        return new AgentChatResponse(runId, userId, sessionId, status, content, toolTraces, errorMessage);
+    }
 }

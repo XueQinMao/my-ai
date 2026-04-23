@@ -1,4 +1,4 @@
-package com.my.ai.cursor.application.dto.memory;
+package com.my.ai.cursor.memory.pojo.req;
 
 public record MemoryQueryRequest(
     String userId,

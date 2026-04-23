@@ -84,7 +84,7 @@ public class ApiServiceConfig {
      * @param ollamaRestClientBuilder
      * @return
      */
-    @Bean("openAiChatModel")
+    @Bean("normalOpenAiChatModel")
     public OpenAiChatModel openAiChatModel(RestClient.Builder ollamaRestClientBuilder) {
         OpenAiApi openAiApi = OpenAiApi.builder()
             .baseUrl(openAiBaseUrl)
@@ -107,7 +107,7 @@ public class ApiServiceConfig {
      * @param ollamaRestClientBuilder
      * @return
      */
-    @Bean("reasoningChatModel")
+    @Bean("agentChatModel")
     public OpenAiChatModel reasoningChatModel(RestClient.Builder ollamaRestClientBuilder) {
 
         OpenAiApi openAiApi =
@@ -119,7 +119,7 @@ public class ApiServiceConfig {
     }
 
     @Bean("normalChatClient")
-    public ChatClient normalChatClient(OpenAiChatModel openAiChatModel, LlmLogAdvisor llmLogAdvisor) {
+    public ChatClient normalChatClient(@Qualifier("normalOpenAiChatModel") OpenAiChatModel openAiChatModel, LlmLogAdvisor llmLogAdvisor) {
         return ChatClient.builder(openAiChatModel)
             .defaultSystem("你是一个友好的 AI 助手，请用中文准确回答用户的问题")
             .defaultAdvisors(llmLogAdvisor)
@@ -127,7 +127,7 @@ public class ApiServiceConfig {
     }
 
     @Bean("agentChatClient")
-    public ChatClient agentChatClient(OpenAiChatModel openAiChatModel, LlmLogAdvisor llmLogAdvisor) {
+    public ChatClient agentChatClient(@Qualifier("agentChatModel") OpenAiChatModel openAiChatModel, LlmLogAdvisor llmLogAdvisor) {
         return ChatClient.builder(openAiChatModel)
             .defaultAdvisors(llmLogAdvisor)
             .defaultSystem("""
@@ -159,16 +159,21 @@ public class ApiServiceConfig {
     }
 
     @Bean("reasoningChatClient")
-    public ChatClient reasoningChatClient(@Qualifier("reasoningChatModel") OpenAiChatModel reasoningChatModel, LlmLogAdvisor llmLogAdvisor) {
+    public ChatClient reasoningChatClient(@Qualifier("normalOpenAiChatModel") OpenAiChatModel reasoningChatModel, LlmLogAdvisor llmLogAdvisor) {
         return ChatClient.builder(reasoningChatModel)
             .defaultAdvisors(llmLogAdvisor)
             .defaultSystem("""
-            你是一个擅长逻辑推理和问题分析的 AI 助手。
-            在回答问题时，请：
+            你是一个擅长逻辑推理和问题分析的 Agent。
+            在回答前请先判断是否需要调用工具获取事实、记忆或历史上下文，请：
               1. 先分析问题本质和关键要素
               2. 逐步推导，展示思考过程
               3. 给出清晰的结论
               4. 如有不确定性，明确说明
+              5. 如果问题需要知识库依据，优先调用知识检索工具。
+              6. 如果问题涉及用户偏好、长期事实或历史延续，优先调用长期记忆工具。
+              7. 如果问题明显依赖最近对话上下文，调用历史对话工具。
+              8. 只有当你已经获取到足够证据时，才输出最终答案。
+              9. 若工具返回失败或信息不足，请明确说明限制，不要编造结果。
               请用中文回答。
             """).build();
     }

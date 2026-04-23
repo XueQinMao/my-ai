@@ -7,6 +7,7 @@ import com.my.ai.cursor.ai.platform.application.agent.AgentRunStatus;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import com.my.ai.cursor.chat.application.pojo.resp.AgentChatResponse;
+import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.memory.application.ShortTermMemoryService;
 import com.my.ai.cursor.memory.application.config.AppMemoryProperties;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -36,19 +37,16 @@ public class ChatApplicationService {
     }
 
     public AgentChatResponse agentChat(ChatRequest request) {
-        // Agent 模式不再提前把知识和长期记忆硬塞进 prompt，而是让模型按需调用工具。
         AgentExecutionResultDto result =
             agentExecutor.execute(request.userId(), request.sessionId(), generatePrompt(request));
         String assistantMessage = resolveAgentMessage(result);
         // 先沿用现有聊天落库链路，保证 agent 输出也能进入会话历史和记忆系统。
         publishChatComplete(request, assistantMessage);
-        return new AgentChatResponse(result.runId(), request.userId(), request.sessionId(),
-            result.scene().name(), result.status(), assistantMessage, result.toolCallCount(), result.toolTraces(),
-            result.errorMessage());
+        return AgentChatResponse.of(result.runId(), request.userId(), request.sessionId(), result.status(),
+            assistantMessage, result.toolTraces(), result.errorMessage());
     }
 
     public Flux<String> agentStreamChat(ChatRequest request) {
-        ;
         Prompt prompt = generatePrompt(request);
         StringBuilder assistantMessage = new StringBuilder();
         return agentExecutor.stream(request.userId(), request.sessionId(), prompt)

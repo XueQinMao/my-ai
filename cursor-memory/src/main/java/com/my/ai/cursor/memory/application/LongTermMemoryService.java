@@ -1,21 +1,18 @@
 package com.my.ai.cursor.memory.application;
 
 import com.my.ai.cursor.ai.platform.application.VectorStoreRouter;
-import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
 import com.my.ai.cursor.memory.domain.MemoryRepository;
+import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
 import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteCommand;
 import com.my.ai.cursor.memory.pojo.dto.MemoryItemDto;
+import com.my.ai.cursor.memory.pojo.req.MemoryQueryRequest;
 import jakarta.annotation.Resource;
 import org.springframework.ai.document.Document;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,10 +36,16 @@ public class LongTermMemoryService {
 
     public void extractAndStore(String userId, String sessionId, Long sourceMessageId, String userMessage,
         String assistantMessage) {
+
+        List<AgentMemory> byUserId = memoryRepository.getByUserId(userId);
+        Set<String> normalizedKeySet =
+            Optional.ofNullable(byUserId).orElse(Collections.emptyList()).stream().map(AgentMemory::getNormalizedKey)
+                .collect(Collectors.toSet());
+
         // 长期记忆不是原始消息直存，而是先提炼成可复用的记忆条目再落库。
         ChatMemoryWriteCommand command =
             new ChatMemoryWriteCommand(userId, sessionId, sourceMessageId, userMessage, assistantMessage);
-        List<AgentMemory> memories = memoryExtractionService.extract(command);
+        List<AgentMemory> memories = memoryExtractionService.extract(command, normalizedKeySet);
         //存向量 为了事务
         LongTermMemoryService bean = applicationContext.getBean(LongTermMemoryService.class);
         bean.store(memories);
@@ -50,6 +53,9 @@ public class LongTermMemoryService {
 
     @Transactional
     public void store(List<AgentMemory> memories) {
+        if(memories.isEmpty()){
+            return;
+        }
         vectorStoreRouter.route().add(memories.stream().map(convertToDocument()).toList());
         memories.forEach(memoryRepository::save);
     }
@@ -62,7 +68,7 @@ public class LongTermMemoryService {
         };
     }
 
-    public List<MemoryItemDto> query(com.my.ai.cursor.application.dto.memory.MemoryQueryRequest request) {
+    public List<MemoryItemDto> query(MemoryQueryRequest request) {
         return memoryRepository.query(request).stream().map(this::toDto).toList();
     }
 

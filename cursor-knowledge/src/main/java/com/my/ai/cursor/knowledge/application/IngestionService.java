@@ -1,7 +1,6 @@
 package com.my.ai.cursor.knowledge.application;
 
 
-import com.my.ai.cursor.knowledge.application.ingestion.persistence.IngestionPersistenceService;
 import com.my.ai.cursor.knowledge.application.ingestion.prepare.IngestionPreparer;
 import com.my.ai.cursor.knowledge.application.pojo.comtext.IngestionContext;
 import com.my.ai.cursor.knowledge.application.pojo.req.IngestRequest;

@@ -9,7 +9,6 @@ import com.my.ai.cursor.chat.infrastructure.entity.ChatMessage;
 import com.my.ai.cursor.chat.infrastructure.entity.ChatSession;
 import com.my.ai.cursor.common.enums.ChatMessageRole;
 import com.my.ai.cursor.common.enums.ChatSessionStatus;
-import com.my.ai.cursor.common.port.ChatHistoryQueryPort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,7 +21,7 @@ import java.util.List;
  * @version 2026/04/22 14:01
  **/
 @Service
-public class ChatMessageService implements ChatHistoryQueryPort {
+public class ChatMessageService {
 
     private final ChatMessageRepository chatMessageRepository;
 
@@ -40,14 +39,6 @@ public class ChatMessageService implements ChatHistoryQueryPort {
                 message.getRole(), message.getContent(), message.getCreatedAt())).toList();
     }
 
-    @Override
-    public List<ChatHistoryItem> getRecentHistory(String sessionId, int limit) {
-        int pageSize = Math.max(1, limit);
-        return history(new ChatHistoryQueryRequest(sessionId, 1, pageSize)).stream()
-            .map(message -> new ChatHistoryItem(message.id(), message.role(), message.content(),
-                message.createdAt() == null ? null : message.createdAt().toString()))
-            .toList();
-    }
 
     public void checkOrCreateChatSession(ChatRequest request) {
         // 业务会话主键与 Spring AI conversationId 对齐，后续短期记忆直接复用 sessionId。

@@ -3,6 +3,7 @@ package com.my.ai.cursor.memory.pojo.dto;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * MemoryExtractAiDto
@@ -13,9 +14,16 @@ import java.math.BigDecimal;
 @Data
 public class MemoryExtractAiDto {
 
-    private String summary;
+    private List<Memorie> memories;
 
-    private BigDecimal importance;
+    @Data
+    public static class Memorie {
+        private String type;
 
-    private BigDecimal confidence;
+        private String summary;
+
+        private BigDecimal importance;
+
+        private BigDecimal confidence;
+    }
 }

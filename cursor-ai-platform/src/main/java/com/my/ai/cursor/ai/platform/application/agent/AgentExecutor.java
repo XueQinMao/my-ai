@@ -38,23 +38,15 @@ public class AgentExecutor {
     public AgentExecutionResultDto execute(String userId, String sessionId, Prompt prompt) {
         String runId = UUID.randomUUID().toString();
         // 一次 agent 执行对应一个 runId，工具调用轨迹与日志都会挂在这个上下文下。
-        AgentExecutionContext context =
-            AgentExecutionContext.of(runId, userId, sessionId, AiScene.AGENT_CHAT, properties.getMaxSteps(),
-                properties.getMaxToolCallsPerRun());
+        AgentExecutionContext context = AgentExecutionContext.of(runId, userId, sessionId, properties.getMaxSteps(),
+            properties.getMaxToolCallsPerRun());
         agentExecutionRecorderDto.startRun(context);
         try {
             // 这里先使用 Spring AI 内置的 tool calling 循环，让模型自主决定是否调用工具并汇总最终答案。
-            String content = aiGatewayService.chat(AiScene.AGENT_CHAT, prompt, agentToolRegistry.resolveTools());
-            List<AgentToolTraceDto> traces = agentExecutionRecorderDto.snapshot();
-            log.info("agent run completed. runId={}, sessionId={}, userId={}, toolCalls={}", runId, sessionId, userId,
-                traces.size());
-            return new AgentExecutionResultDto(runId, AiScene.AGENT_CHAT, AgentRunStatus.COMPLETED, content,
-                traces.size(), traces, null);
+            String content = aiGatewayService.chat(AiScene.AGENT_CHAT, prompt, agentToolRegistry.getTools());
+            return AgentExecutionResultDto.success(runId, content, agentExecutionRecorderDto.snapshot());
         } catch (Exception e) {
-            List<AgentToolTraceDto> traces = agentExecutionRecorderDto.snapshot();
-            log.error("agent run failed. runId={}, sessionId={}, userId={}", runId, sessionId, userId, e);
-            return new AgentExecutionResultDto(runId, AiScene.AGENT_CHAT, AgentRunStatus.FAILED, null, traces.size(),
-                traces, e.getMessage());
+            return AgentExecutionResultDto.failure(runId, agentExecutionRecorderDto.snapshot(), e.getMessage());
         } finally {
             agentExecutionRecorderDto.finishRun();
         }

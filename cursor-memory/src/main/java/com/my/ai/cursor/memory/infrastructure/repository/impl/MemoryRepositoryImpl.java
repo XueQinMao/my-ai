@@ -1,14 +1,17 @@
 package com.my.ai.cursor.memory.infrastructure.repository.impl;
 
 import com.my.ai.cursor.common.enums.MemoryStatus;
+import com.my.ai.cursor.common.enums.MemoryType;
 import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
 import com.my.ai.cursor.memory.domain.MemoryRepository;
 import com.my.ai.cursor.memory.infrastructure.service.AgentMemoryService;
+import com.my.ai.cursor.memory.pojo.req.MemoryQueryRequest;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class MemoryRepositoryImpl implements MemoryRepository {
@@ -34,33 +37,7 @@ public class MemoryRepositoryImpl implements MemoryRepository {
     }
 
     @Override
-    public List<AgentMemory> findActiveByUserId(String userId, int limit) {
-        LocalDateTime now = LocalDateTime.now();
-        return agentMemoryService.lambdaQuery().eq(AgentMemory::getUserId, userId)
-            .eq(AgentMemory::getStatus, MemoryStatus.ACTIVE.name())
-            .and(wrapper -> wrapper.isNull(AgentMemory::getTtlAt).or().gt(AgentMemory::getTtlAt, now))
-            .orderByDesc(AgentMemory::getImportance).orderByDesc(AgentMemory::getUpdatedAt).last("LIMIT " + limit)
-            .list();
-    }
-
-    @Override
-    @Deprecated
-    public List<AgentMemory> searchRelevant(String userId, String query, int limit) {
-        if (!StringUtils.hasText(query)) {
-            return findActiveByUserId(userId, limit);
-        }
-        String trimmed = query.trim();
-        LocalDateTime now = LocalDateTime.now();
-        return agentMemoryService.lambdaQuery().eq(AgentMemory::getUserId, userId)
-            .eq(AgentMemory::getStatus, MemoryStatus.ACTIVE.name())
-            .and(wrapper -> wrapper.isNull(AgentMemory::getTtlAt).or().gt(AgentMemory::getTtlAt, now)).and(
-                wrapper -> wrapper.like(AgentMemory::getContent, trimmed).or().like(AgentMemory::getSummary, trimmed)
-                    .or().like(AgentMemory::getNormalizedKey, trimmed)).orderByDesc(AgentMemory::getImportance)
-            .orderByDesc(AgentMemory::getUpdatedAt).last("LIMIT " + limit).list();
-    }
-
-    @Override
-    public List<AgentMemory> query(com.my.ai.cursor.application.dto.memory.MemoryQueryRequest request) {
+    public List<AgentMemory> query(MemoryQueryRequest request) {
         LocalDateTime now = LocalDateTime.now();
         var query = agentMemoryService.lambdaQuery().eq(AgentMemory::getUserId, request.userId())
             .and(wrapper -> wrapper.isNull(AgentMemory::getTtlAt).or().gt(AgentMemory::getTtlAt, now))
@@ -92,8 +69,7 @@ public class MemoryRepositoryImpl implements MemoryRepository {
     }
 
     @Override
-    public List<AgentMemory> getAgentMemoryByVectorId(List<String> vectorIds) {
-
-        return agentMemoryService.lambdaQuery().in(AgentMemory::getVectorStoreId, vectorIds).list();
+    public List<AgentMemory> getByUserId(String userId) {
+        return agentMemoryService.lambdaQuery().eq(AgentMemory::getUserId, userId).list();
     }
 }

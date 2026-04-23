@@ -19,7 +19,7 @@ public class AppMemoryProperties {
 
     public static class ShortTerm {
         private boolean enabled = true;
-        private int windowSize = 12;
+        private int windowSize = 6;
 
         public boolean isEnabled() {
             return enabled;
