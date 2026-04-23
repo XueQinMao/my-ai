@@ -13,15 +13,15 @@ public class ChatClientRouter {
 
     private final Map<AiScene, ChatClient> chatClients;
 
-    public ChatClientRouter(@Qualifier("normalChatClient") ChatClient normalChatClient,
+    public ChatClientRouter(@Qualifier("agentChatClient") ChatClient agentChatClient,
+                            @Qualifier("normalChatClient") ChatClient normalChatClient,
                             @Qualifier("reasoningChatClient") ChatClient reasoningChatClient,
                             @Qualifier("ragCleaningChatClient") ChatClient ragCleaningChatClient) {
-        EnumMap<AiScene, ChatClient> routes = new EnumMap<>(AiScene.class);
-        routes.put(AiScene.NORMAL_CHAT, normalChatClient);
-        routes.put(AiScene.REASONING_CHAT, reasoningChatClient);
-        routes.put(AiScene.RAG_CLEANING, ragCleaningChatClient);
-        routes.put(AiScene.MEMORY_EXTRACTION, ragCleaningChatClient);
-        this.chatClients = Map.copyOf(routes);
+        this.chatClients = Map.ofEntries(Map.entry(AiScene.AGENT_CHAT, agentChatClient),
+                Map.entry(AiScene.NORMAL_CHAT, normalChatClient),
+                Map.entry(AiScene.REASONING_CHAT, reasoningChatClient),
+                Map.entry(AiScene.RAG_CLEANING, ragCleaningChatClient),
+                Map.entry(AiScene.MEMORY_EXTRACTION, ragCleaningChatClient));
     }
 
     public ChatClient route(AiScene scene) {

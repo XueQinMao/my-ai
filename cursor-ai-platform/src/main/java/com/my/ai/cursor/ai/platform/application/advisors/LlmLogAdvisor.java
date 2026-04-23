@@ -1,6 +1,8 @@
 package com.my.ai.cursor.ai.platform.application.advisors;
 
 import com.lmax.disruptor.dsl.Disruptor;
+import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentExecutionRecorderDto;
+import com.my.ai.cursor.ai.platform.application.pojo.context.AgentExecutionContext;
 import com.my.ai.cursor.ai.platform.application.event.LlmTokenCostEvent;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
@@ -26,8 +28,14 @@ public class LlmLogAdvisor implements CallAdvisor, StreamAdvisor {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    private final AgentExecutionRecorderDto agentExecutionRecorderDto;
+
     @Resource(name = "llmTokenCostEventDisruptor")
     private Disruptor<LlmTokenCostEvent> disruptor;
+
+    public LlmLogAdvisor(AgentExecutionRecorderDto agentExecutionRecorderDto) {
+        this.agentExecutionRecorderDto = agentExecutionRecorderDto;
+    }
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest chatClientRequest, CallAdvisorChain callAdvisorChain) {
@@ -64,25 +72,51 @@ public class LlmLogAdvisor implements CallAdvisor, StreamAdvisor {
     }
 
     private void logRequest(ChatClientRequest request) {
-        logger.info("llm request: {}", request);
+        AgentExecutionContext context = agentExecutionRecorderDto.currentContext();
+        if (context == null) {
+            logger.info("llm request: {}", request);
+            return;
+        }
+        // 进入 agent 模式后，把 runId/userId/sessionId 串进日志，便于排查某次工具链路的完整上下文。
+        logger.info("llm request. runId={}, userId={}, sessionId={}, request={}", context.runId(), context.userId(),
+            context.sessionId(), request);
     }
 
     private void logResponse(ChatClientResponse chatClientResponse) {
-        logger.info("llm response: {}", chatClientResponse);
+        AgentExecutionContext context = agentExecutionRecorderDto.currentContext();
+        if (context == null) {
+            logger.info("llm response: {}", chatClientResponse);
+            return;
+        }
+        logger.info("llm response. runId={}, userId={}, sessionId={}, response={}", context.runId(), context.userId(),
+            context.sessionId(), chatClientResponse);
     }
 
     private void sendTokenCostEvent(Long chatId, ChatClientResponse chatClientResponse) {
+        AgentExecutionContext context = agentExecutionRecorderDto.currentContext();
         var model = chatClientResponse.chatResponse().getMetadata().getModel();
         var totalTokens = chatClientResponse.chatResponse().getMetadata().getUsage().getTotalTokens();
         var promptTokens = chatClientResponse.chatResponse().getMetadata().getUsage().getPromptTokens();
         var completionTokens = chatClientResponse.chatResponse().getMetadata().getUsage().getCompletionTokens();
         disruptor.getRingBuffer().publishEvent((event, sequence) -> {
-            event.setUserId(1L);
+            // userId 目前事件里仍是 Long，因此这里做一次兼容转换，避免字符串用户标识直接打断埋点。
+            event.setUserId(parseUserId(context == null ? null : context.userId()));
             event.setChatId(chatId);
             event.setModelName(model);
             event.setTokenCount(totalTokens);
             event.setPromptTokens(promptTokens);
             event.setCompletionTokens(completionTokens);
         });
+    }
+
+    private Long parseUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(userId);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 }

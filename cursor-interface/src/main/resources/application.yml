@@ -11,9 +11,9 @@ spring:
       force-response: true
 
   datasource:
-    url: jdbc:mariadb://10.22.36.120:8833/ai_chat?useSSL=false&serverTimezone=UTC
-    username: root
-    password: 5F52uA8npe
+    url: ${AI_DB_URL}
+    username: ${AI_DB_USERNAME:root}
+    password: ${AI_DB_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
 
   flyway:
@@ -50,7 +50,7 @@ spring:
 
     openai:
       # 阿里百炼 DashScope OpenAI 兼容接口（不要加 /v1，Spring AI 会自动追加）
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
       api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
@@ -63,6 +63,9 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 app:
+  agent:
+    max-steps: 6
+    max-tool-calls-per-run: 6
   memory:
     short-term:
       enabled: true

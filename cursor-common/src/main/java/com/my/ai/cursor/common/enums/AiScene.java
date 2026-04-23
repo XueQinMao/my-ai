@@ -1,6 +1,7 @@
 package com.my.ai.cursor.common.enums;
 
 public enum AiScene {
+    AGENT_CHAT,
     NORMAL_CHAT,
     REASONING_CHAT,
     RAG_CLEANING,

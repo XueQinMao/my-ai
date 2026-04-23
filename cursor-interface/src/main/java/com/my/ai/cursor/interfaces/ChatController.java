@@ -5,6 +5,7 @@ import com.my.ai.cursor.chat.application.ChatMessageService;
 import com.my.ai.cursor.chat.application.pojo.dto.ChatMessageDto;
 import com.my.ai.cursor.chat.application.pojo.req.ChatHistoryQueryRequest;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
+import com.my.ai.cursor.chat.application.pojo.resp.AgentChatResponse;
 import com.my.ai.cursor.chat.application.pojo.resp.ChatResponse;
 import com.my.ai.cursor.interfaces.pojo.vo.Response;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,32 +31,25 @@ public class ChatController {
         this.chatMessageService = chatMessageService;
     }
 
-    @PostMapping
-    public Response<ChatResponse> chat(@RequestBody ChatRequest request) {
-        return Response.success(chatApplicationService.chat(request));
+    /**
+     *
+     * @param request
+     * @return
+     */
+    @PostMapping("")
+    public Response<AgentChatResponse> agentChat(@RequestBody ChatRequest request) {
+        return Response.success(chatApplicationService.agentChat(request));
     }
 
     @GetMapping(value = "/stream", produces = "text/event-stream;charset=UTF-8")
-    public Flux<String> streamChat(@RequestParam String message,
-                                   @RequestParam(required = false) String userId,
-                                   @RequestParam(required = false) String sessionId,
-                                   @RequestParam(required = false) String scene,
-                                   @RequestParam(required = false) Boolean enableKnowledge,
-                                   @RequestParam(required = false) Boolean enableLongTermMemory,
-                                   @RequestParam(required = false) Integer memoryWindow) {
-        return chatApplicationService.streamChat(
-            new ChatRequest(userId, sessionId, message, scene, enableKnowledge, enableLongTermMemory, memoryWindow));
-    }
-
-    @GetMapping(value = "/stream/rag", produces = "text/event-stream;charset=UTF-8")
-    public Flux<String> streamChatWithRag(@RequestParam String message,
-                                          @RequestParam(required = false) String userId,
-                                          @RequestParam(required = false) String sessionId,
-                                          @RequestParam(required = false) String scene,
-                                          @RequestParam(required = false) Boolean enableLongTermMemory,
-                                          @RequestParam(required = false) Integer memoryWindow) {
-        return chatApplicationService.streamChat(
-            new ChatRequest(userId, sessionId, message, scene, true, enableLongTermMemory, memoryWindow));
+    public Flux<String> streamAgentChat(@RequestParam String message,
+                                        @RequestParam(required = false) String userId,
+                                        @RequestParam(required = false) String sessionId,
+                                        @RequestParam(required = false) Boolean enableKnowledge,
+                                        @RequestParam(required = false) Boolean enableLongTermMemory,
+                                        @RequestParam(required = false) Integer memoryWindow) {
+        return chatApplicationService.agentStreamChat(
+            new ChatRequest(userId, sessionId, message, null, enableKnowledge, enableLongTermMemory, memoryWindow));
     }
 
     @GetMapping("/history")

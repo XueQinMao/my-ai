@@ -32,12 +32,16 @@ public class MemoryRecallService {
         int recallLimit = limit == null || limit <= 0 ? appMemoryProperties.getLongTerm().getRecallLimit() : limit;
         //提取考虑从向量数据库中去提取
         SearchRequest build = SearchRequest.builder().query(query).topK(recallLimit).similarityThreshold(0.7)
-            .filterExpression("userId == '" + userId + "' AND doc_type == 'MEMORY'").build();
+            .filterExpression("userId == '" + escapeLiteral(userId) + "' AND doc_type == 'MEMORY'").build();
         List<Document> documents = aiGatewayService.similaritySearch(build);
         return documents.stream().map(this::toDto).toList();
     }
 
     private MemoryItemDto toDto(Document document) {
         return new MemoryItemDto(null, null, null, null, document.getText(), null, null, null, null, null);
+    }
+
+    private String escapeLiteral(String value) {
+        return value.replace("'", "\\'");
     }
 }

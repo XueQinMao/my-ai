@@ -72,6 +72,10 @@
             <groupId>com.my.ai.cursor</groupId>
             <artifactId>cursor-ai-platform</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.my.ai.cursor</groupId>
+            <artifactId>cursor-tool</artifactId>
+        </dependency>
 
         <!-- Lombok -->
         <dependency>

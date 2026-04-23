@@ -2,9 +2,9 @@ package com.my.ai.cursor.chat.application.event.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.lmax.disruptor.EventHandler;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.ResolvedChatDto;
 import com.my.ai.cursor.chat.application.ChatMessageService;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
+import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import com.my.ai.cursor.memory.application.LongTermMemoryService;
 import com.my.ai.cursor.memory.application.ShortTermMemoryService;
 import org.slf4j.Logger;
@@ -53,13 +53,13 @@ public class ChatCompleteEventHandler implements EventHandler<ChatCompleteEvent>
         triggerLongTermMemory(chatCompleteEvent.getRequest(), userMessageId, chatCompleteEvent.getAssistantMessage());
     }
 
-    private void persistShortTermMemory(ResolvedChatDto request, String assistantMessage) {
+    private void persistShortTermMemory(ChatRequest request, String assistantMessage) {
         // Spring AI 的短期记忆只保存窗口消息，不承担完整聊天历史审计。
         shortTermMemoryService.addUserMessage(request.sessionId(), request.message());
         shortTermMemoryService.addAssistantMessage(request.sessionId(), assistantMessage);
     }
 
-    private void triggerLongTermMemory(ResolvedChatDto request, Long userMessageId, String assistantMessage) {
+    private void triggerLongTermMemory(ChatRequest request, Long userMessageId, String assistantMessage) {
         if (!request.enableLongTermMemory()) {
             return;
         }

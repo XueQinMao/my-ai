@@ -126,6 +126,24 @@ public class ApiServiceConfig {
             .build();
     }
 
+    @Bean("agentChatClient")
+    public ChatClient agentChatClient(OpenAiChatModel openAiChatModel, LlmLogAdvisor llmLogAdvisor) {
+        return ChatClient.builder(openAiChatModel)
+            .defaultAdvisors(llmLogAdvisor)
+            .defaultSystem("""
+                你是一个具备工具调用能力的中文智能 Agent。
+                在回答前请先判断是否需要调用工具获取事实、记忆或历史上下文。
+                规则如下：
+                1. 如果问题需要知识库依据，优先调用知识检索工具。
+                2. 如果问题涉及用户偏好、长期事实或历史延续，优先调用长期记忆工具。
+                3. 如果问题明显依赖最近对话上下文，调用历史对话工具。
+                4. 只有当你已经获取到足够证据时，才输出最终答案。
+                5. 若工具返回失败或信息不足，请明确说明限制，不要编造结果。
+                6. 请使用中文回答。
+                """)
+            .build();
+    }
+
     @Bean("ragCleaningChatClient")
     public ChatClient ragCleaningChatClient(@Qualifier("ragCleaningChatModel") OpenAiChatModel ragCleaningChatModel, LlmLogAdvisor llmLogAdvisor) {
         return ChatClient.builder(ragCleaningChatModel)

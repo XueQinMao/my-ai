@@ -24,7 +24,6 @@ public class LongTermMemoryService {
 
     private final MemoryRepository memoryRepository;
     private final MemoryExtractionService memoryExtractionService;
-    private final MemoryRecallService memoryRecallService;
 
     @Resource
     private ApplicationContext applicationContext;
@@ -32,16 +31,10 @@ public class LongTermMemoryService {
     private final VectorStoreRouter vectorStoreRouter;
 
     public LongTermMemoryService(MemoryRepository memoryRepository, MemoryExtractionService memoryExtractionService,
-        MemoryRecallService memoryRecallService, VectorStoreRouter vectorStoreRouter) {
+        VectorStoreRouter vectorStoreRouter) {
         this.memoryRepository = memoryRepository;
         this.memoryExtractionService = memoryExtractionService;
-        this.memoryRecallService = memoryRecallService;
         this.vectorStoreRouter = vectorStoreRouter;
-    }
-
-    public String generateLongMemoryContext(String userId, String query, int limit) {
-        var recall = memoryRecallService.recall(userId, query, limit);
-        return formatLongTermMemories(recall);
     }
 
     public void extractAndStore(String userId, String sessionId, Long sourceMessageId, String userMessage,
@@ -69,9 +62,7 @@ public class LongTermMemoryService {
         };
     }
 
-
-    public List<MemoryItemDto> query(
-        com.my.ai.cursor.application.dto.memory.MemoryQueryRequest request) {
+    public List<MemoryItemDto> query(com.my.ai.cursor.application.dto.memory.MemoryQueryRequest request) {
         return memoryRepository.query(request).stream().map(this::toDto).toList();
     }
 
@@ -80,17 +71,10 @@ public class LongTermMemoryService {
     }
 
     private MemoryItemDto toDto(AgentMemory memory) {
-        return new MemoryItemDto(memory.getId(), memory.getUserId(),
-            memory.getSessionId(), memory.getMemoryType(), memory.getContent(), memory.getSummary(),
+        return new MemoryItemDto(memory.getId(), memory.getUserId(), memory.getSessionId(), memory.getMemoryType(),
+            memory.getContent(), memory.getSummary(),
             memory.getImportance() == null ? null : memory.getImportance().doubleValue(),
             memory.getConfidence() == null ? null : memory.getConfidence().doubleValue(), memory.getStatus(),
             memory.getTtlAt());
-    }
-
-    private String formatLongTermMemories(List<MemoryItemDto> memories) {
-        return Optional.ofNullable(memories).orElse(Collections.emptyList()).stream().map(
-                item -> "- %s".formatted(
-                    StringUtils.hasText(item.summary()) ? item.summary() : item.content()))
-            .collect(Collectors.joining("\n"));
     }
 }

@@ -1,7 +1,7 @@
 package com.my.ai.cursor.chat.application.event;
 
 import com.lmax.disruptor.EventFactory;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.ResolvedChatDto;
+import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import lombok.Data;
 
 /**
@@ -15,7 +15,7 @@ public class ChatCompleteEvent {
 
     private String assistantMessage;
 
-    private ResolvedChatDto request;
+    private ChatRequest request;
 
     public static final EventFactory<ChatCompleteEvent> FACTORY = ChatCompleteEvent::new;
 

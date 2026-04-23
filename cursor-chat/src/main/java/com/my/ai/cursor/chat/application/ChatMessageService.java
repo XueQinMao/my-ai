@@ -1,14 +1,15 @@
 package com.my.ai.cursor.chat.application;
 
 import com.my.ai.cursor.chat.application.pojo.dto.ChatMessageDto;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.ResolvedChatDto;
 import com.my.ai.cursor.chat.application.pojo.req.ChatHistoryQueryRequest;
+import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import com.my.ai.cursor.chat.domain.repository.ChatMessageRepository;
 import com.my.ai.cursor.chat.domain.repository.ChatSessionRepository;
 import com.my.ai.cursor.chat.infrastructure.entity.ChatMessage;
 import com.my.ai.cursor.chat.infrastructure.entity.ChatSession;
 import com.my.ai.cursor.common.enums.ChatMessageRole;
 import com.my.ai.cursor.common.enums.ChatSessionStatus;
+import com.my.ai.cursor.common.port.ChatHistoryQueryPort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -21,7 +22,7 @@ import java.util.List;
  * @version 2026/04/22 14:01
  **/
 @Service
-public class ChatMessageService {
+public class ChatMessageService implements ChatHistoryQueryPort {
 
     private final ChatMessageRepository chatMessageRepository;
 
@@ -39,27 +40,36 @@ public class ChatMessageService {
                 message.getRole(), message.getContent(), message.getCreatedAt())).toList();
     }
 
-    public void checkOrCreateChatSession(ResolvedChatDto request) {
+    @Override
+    public List<ChatHistoryItem> getRecentHistory(String sessionId, int limit) {
+        int pageSize = Math.max(1, limit);
+        return history(new ChatHistoryQueryRequest(sessionId, 1, pageSize)).stream()
+            .map(message -> new ChatHistoryItem(message.id(), message.role(), message.content(),
+                message.createdAt() == null ? null : message.createdAt().toString()))
+            .toList();
+    }
+
+    public void checkOrCreateChatSession(ChatRequest request) {
         // 业务会话主键与 Spring AI conversationId 对齐，后续短期记忆直接复用 sessionId。
         chatSessionRepository.findBySessionId(request.sessionId()).orElseGet(() -> createSession(request));
     }
 
-    public Long saveUserMessage(ResolvedChatDto request) {
+    public Long saveUserMessage(ChatRequest request) {
         return saveMessage(request.sessionId(), request.userId(), ChatMessageRole.USER.name(), request.message(), null,
             null, null);
     }
 
-    public Long saveAssistantMessage(ResolvedChatDto request, String content) {
+    public Long saveAssistantMessage(ChatRequest request, String content) {
         return saveMessage(request.sessionId(), request.userId(), ChatMessageRole.ASSISTANT.name(), content, null, null,
             null);
     }
 
-    private ChatSession createSession(ResolvedChatDto request) {
+    private ChatSession createSession(ChatRequest request) {
         LocalDateTime now = LocalDateTime.now();
         ChatSession session = new ChatSession();
         session.setSessionId(request.sessionId());
         session.setUserId(request.userId());
-        session.setScene(request.sceneName());
+        session.setScene(request.scene());
         session.setStatus(ChatSessionStatus.ACTIVE.name());
         session.setTitle(buildTitle(request.message()));
         session.setLastMessageAt(now);

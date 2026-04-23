@@ -1,15 +1,14 @@
 package com.my.ai.cursor.chat.application;
 
 import com.lmax.disruptor.dsl.Disruptor;
-import com.my.ai.cursor.ai.platform.application.AiGatewayService;
-import com.my.ai.cursor.memory.application.config.AppMemoryProperties;
+import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentExecutionResultDto;
+import com.my.ai.cursor.ai.platform.application.agent.AgentExecutor;
+import com.my.ai.cursor.ai.platform.application.agent.AgentRunStatus;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.ResolvedChatDto;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
-import com.my.ai.cursor.chat.application.pojo.resp.ChatResponse;
-import com.my.ai.cursor.knowledge.application.KnowledgeSearchService;
-import com.my.ai.cursor.memory.application.LongTermMemoryService;
+import com.my.ai.cursor.chat.application.pojo.resp.AgentChatResponse;
 import com.my.ai.cursor.memory.application.ShortTermMemoryService;
+import com.my.ai.cursor.memory.application.config.AppMemoryProperties;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.stereotype.Service;
@@ -21,95 +20,76 @@ import java.util.Map;
 @Service
 public class ChatApplicationService {
 
-    private final AiGatewayService aiGatewayService;
-    private final ChatOptionDecisionService chatOptionDecisionService;
-    private final ShortTermMemoryService shortTermMemoryService;
-    private final LongTermMemoryService longTermMemoryService;
-    private final KnowledgeSearchService knowledgeSearchService;
+    private final AgentExecutor agentExecutor;
     private final AppMemoryProperties appMemoryProperties;
+
+    private final ShortTermMemoryService shortTermMemoryService;
 
     private final Disruptor<ChatCompleteEvent> chatCompleteDisruptor;
 
-    public ChatApplicationService(AiGatewayService aiGatewayService,
-        ChatOptionDecisionService chatOptionDecisionService, ShortTermMemoryService shortTermMemoryService,
-        LongTermMemoryService longTermMemoryService, KnowledgeSearchService knowledgeSearchService,
-        AppMemoryProperties appMemoryProperties, Disruptor<ChatCompleteEvent> chatCompleteDisruptor) {
-        this.aiGatewayService = aiGatewayService;
-        this.chatOptionDecisionService = chatOptionDecisionService;
-        this.shortTermMemoryService = shortTermMemoryService;
-        this.longTermMemoryService = longTermMemoryService;
-        this.knowledgeSearchService = knowledgeSearchService;
+    public ChatApplicationService(AgentExecutor agentExecutor, AppMemoryProperties appMemoryProperties,
+        ShortTermMemoryService shortTermMemoryService, Disruptor<ChatCompleteEvent> chatCompleteDisruptor) {
+        this.agentExecutor = agentExecutor;
         this.appMemoryProperties = appMemoryProperties;
+        this.shortTermMemoryService = shortTermMemoryService;
         this.chatCompleteDisruptor = chatCompleteDisruptor;
     }
 
-    public ChatResponse chat(ChatRequest request) {
-        ResolvedChatDto resolvedRequest = chatOptionDecisionService.resolve(request);
-        // Prompt 由三部分上下文拼装而成：短期记忆、长期记忆、可选知识库资料。
-        Prompt prompt = generatePrompt(resolvedRequest);
-        String assistantMessage = aiGatewayService.chat(resolvedRequest.scene(), prompt);
-
-        //记忆系统先关
-        chatCompleteDisruptor.getRingBuffer().publishEvent((event, sequence) -> {
-            event.setAssistantMessage(assistantMessage);
-            event.setRequest(resolvedRequest);
-        });
-        return buildResponse(resolvedRequest, assistantMessage);
+    public AgentChatResponse agentChat(ChatRequest request) {
+        // Agent 模式不再提前把知识和长期记忆硬塞进 prompt，而是让模型按需调用工具。
+        AgentExecutionResultDto result =
+            agentExecutor.execute(request.userId(), request.sessionId(), generatePrompt(request));
+        String assistantMessage = resolveAgentMessage(result);
+        // 先沿用现有聊天落库链路，保证 agent 输出也能进入会话历史和记忆系统。
+        publishChatComplete(request, assistantMessage);
+        return new AgentChatResponse(result.runId(), request.userId(), request.sessionId(),
+            result.scene().name(), result.status(), assistantMessage, result.toolCallCount(), result.toolTraces(),
+            result.errorMessage());
     }
 
-    public Flux<String> streamChat(ChatRequest request) {
-        ResolvedChatDto resolvedRequest = chatOptionDecisionService.resolve(request);
-        Prompt prompt = generatePrompt(resolvedRequest);
+    public Flux<String> agentStreamChat(ChatRequest request) {
+        ;
+        Prompt prompt = generatePrompt(request);
         StringBuilder assistantMessage = new StringBuilder();
-        return aiGatewayService.streamChat(resolvedRequest.scene(), prompt).doOnNext(assistantMessage::append)
-            .doOnComplete(() -> {
-                // 流式输出结束后再补写助手消息，避免把半截响应写入业务消息表和记忆系统。
-                String response = assistantMessage.toString();
-                chatCompleteDisruptor.getRingBuffer().publishEvent((event, sequence) -> {
-                    event.setAssistantMessage(response);
-                    event.setRequest(resolvedRequest);
-                });
-            });
+        return agentExecutor.stream(request.userId(), request.sessionId(), prompt)
+            .doOnNext(assistantMessage::append)
+            .doOnComplete(() -> publishChatComplete(request, assistantMessage.toString()));
     }
 
-    private Prompt generatePrompt(ResolvedChatDto request) {
+    private Prompt generatePrompt(ChatRequest request) {
         String historyContext = defaultContext(
             appMemoryProperties.getShortTerm().isEnabled() ? shortTermMemoryService.generateShortMemoryContext(
                 request.sessionId(), request.memoryWindow()) : null);
-        String longMemoryContext = defaultContext(
-            request.enableLongTermMemory() ? longTermMemoryService.generateLongMemoryContext(request.userId(),
-                 request.message(), appMemoryProperties.getLongTerm().getRecallLimit()) : null);
-        String knowledgeContext = defaultContext(
-            request.enableKnowledge() ? knowledgeSearchService.generateRagContext(request.message(), 3) : null);
-
-        // 长期记忆强调“用户稳定偏好”，短期记忆强调“最近几轮上下文”，知识库负责外部事实补充。
+        // Agent prompt 只提供最小必要上下文，外部知识与长期记忆交给 tool calling 动态获取。
         PromptTemplate promptTemplate = new PromptTemplate("""
-            你是一个友好的 AI 助手，请用中文准确回答用户的问题。
-            如果提供了长期记忆，请优先遵守其中关于用户偏好和风格的要求。
-            如果提供了知识库参考资料，请仅在资料足够时引用，不足时明确说明资料不足。
-            如果提供了长期记忆，请仅在记忆足够时引用，不足时明确说明无长期记忆。
-            如果提供了最近对话，请仅在最近对话足够时引用，不足时明确说明无最近对话。
+            你正在处理一个需要工具增强的用户请求。
+            你可以在需要时调用知识库、长期记忆和最近历史工具。
+            如果最近对话已经足够解释上下文，可以直接利用历史工具补全事实。
+            不要编造资料；当工具结果不足时请明确说明信息不足。
             
-            【长期记忆】
-            {memoryContext}
-            
-            【最近对话】
+            【最近对话窗口】
             {historyContext}
-            
-            【知识库参考资料】
-            {knowledgeContext}
             
             【用户问题】
             {message}
             """);
-        return promptTemplate.create(
-            Map.of("memoryContext", longMemoryContext, "historyContext", historyContext, "knowledgeContext",
-                knowledgeContext, "message", request.message()));
+        return promptTemplate.create(Map.of("historyContext", historyContext, "message", request.message()));
     }
 
-    private ChatResponse buildResponse(ResolvedChatDto request, String content) {
-        return new ChatResponse(request.userId(), request.sessionId(), request.sceneName(), content,
-            request.enableKnowledge(), request.enableLongTermMemory());
+    private String resolveAgentMessage(AgentExecutionResultDto result) {
+        if (result.status() == AgentRunStatus.COMPLETED) {
+            return result.finalAnswer();
+        }
+        // 对外统一转成可读错误文案，内部详细异常仍保留在 agent trace 和日志里。
+        return StringUtils.hasText(result.errorMessage()) ? "Agent 执行失败：" + result.errorMessage()
+            : "Agent 执行失败，请稍后重试。";
+    }
+
+    private void publishChatComplete(ChatRequest request, String assistantMessage) {
+        chatCompleteDisruptor.getRingBuffer().publishEvent((event, sequence) -> {
+            event.setAssistantMessage(assistantMessage);
+            event.setRequest(request);
+        });
     }
 
     private String defaultContext(String context) {

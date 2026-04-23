@@ -1,6 +1,5 @@
 package com.my.ai.cursor.ai.platform.application;
 
-import com.my.ai.cursor.ai.platform.application.advisors.LlmLogAdvisor;
 import com.my.ai.cursor.common.enums.AiScene;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -35,6 +34,10 @@ public class AiGatewayService {
 
     public String chat(AiScene scene, Prompt prompt) {
         return chatClientRouter.route(scene).prompt(prompt).call().content();
+    }
+
+    public String chat(AiScene scene, Prompt prompt, List<Object> tools) {
+        return chatClientRouter.route(scene).prompt(prompt).tools(tools.toArray()).call().content();
     }
 
     public <T> T chat(AiScene scene, Prompt prompt, Class<T> _class) {

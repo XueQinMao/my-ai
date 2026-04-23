@@ -20,6 +20,7 @@
         <module>cursor-ai-platform</module>
         <module>cursor-memory</module>
         <module>cursor-knowledge</module>
+        <module>cursor-tool</module>
         <module>cursor-chat</module>
         <module>cursor-interface</module>
     </modules>
@@ -74,6 +75,11 @@
             <dependency>
                 <groupId>com.my.ai.cursor</groupId>
                 <artifactId>cursor-chat</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.my.ai.cursor</groupId>
+                <artifactId>cursor-tool</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
