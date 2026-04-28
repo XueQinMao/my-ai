@@ -2,6 +2,10 @@ package com.my.ai.cursor.chat.application.event.handler;
 
 import com.alibaba.fastjson.JSON;
 import com.lmax.disruptor.EventHandler;
+import com.my.ai.cursor.ai.platform.application.agent.AgentRunStatus;
+import com.my.ai.cursor.ai.platform.application.context.RequestContext;
+import com.my.ai.cursor.chat.application.AnswerEvaluationService;
+import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentRunResult;
 import com.my.ai.cursor.chat.application.ChatMessageService;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
@@ -28,29 +32,37 @@ public class ChatCompleteEventHandler implements EventHandler<ChatCompleteEvent>
 
     private final LongTermMemoryService longTermMemoryService;
 
+    private final AnswerEvaluationService answerEvaluationService;
+
     public ChatCompleteEventHandler(ChatMessageService chatMessageService,
-        ShortTermMemoryService shortTermMemoryService, LongTermMemoryService longTermMemoryService) {
+        ShortTermMemoryService shortTermMemoryService, LongTermMemoryService longTermMemoryService,
+        AnswerEvaluationService answerEvaluationService) {
         this.chatMessageService = chatMessageService;
         this.shortTermMemoryService = shortTermMemoryService;
         this.longTermMemoryService = longTermMemoryService;
+        this.answerEvaluationService = answerEvaluationService;
     }
 
     @Override
-    public void onEvent(ChatCompleteEvent chatCompleteEvent, long sequence, boolean endOfBatch) throws Exception {
-        log.info("ChatCompleteEvent:{} 位置:{} 是否结尾:{}", JSON.toJSONString(chatCompleteEvent), sequence,
+    public void onEvent(ChatCompleteEvent event, long sequence, boolean endOfBatch) throws Exception {
+        log.info("ChatCompleteEvent:{} 位置:{} 是否结尾:{}", JSON.toJSONString(event), sequence,
             endOfBatch);
         //创建chat-session
-        chatMessageService.checkOrCreateChatSession(chatCompleteEvent.getRequest());
+        chatMessageService.checkOrCreateChatSession(event.getRequest());
         //保存用户的消息chat-message
-        Long userMessageId = chatMessageService.saveUserMessage(chatCompleteEvent.getRequest());
+        Long userMessageId = chatMessageService.saveUserMessage(event.getRequest());
 
         //保存模型输出的消息chat-message
-        chatMessageService.saveAssistantMessage(chatCompleteEvent.getRequest(),
-            chatCompleteEvent.getAssistantMessage());
+        chatMessageService.saveAssistantMessage(event.getRequest(),
+            event.getAssistant());
         //短期的用户消息+模型消息记录
-        persistShortTermMemory(chatCompleteEvent.getRequest(), chatCompleteEvent.getAssistantMessage());
+        persistShortTermMemory(event.getRequest(), event.getAssistant());
         //触发长期记忆
-        triggerLongTermMemory(chatCompleteEvent.getRequest(), userMessageId, chatCompleteEvent.getAssistantMessage());
+        triggerLongTermMemory(event.getRequest(), userMessageId, event.getAssistant());
+
+        //用户评分
+        triggerEvaluation(event.getRequestContext(), event.getRequest(), event.getAssistant(),
+            event.getAgentRunResult());
     }
 
     private void persistShortTermMemory(ChatRequest request, String assistantMessage) {
@@ -68,4 +80,13 @@ public class ChatCompleteEventHandler implements EventHandler<ChatCompleteEvent>
             assistantMessage);
     }
 
+
+    private void triggerEvaluation(RequestContext requestContext, ChatRequest request, String assistantMessage,
+        AgentRunResult result) {
+        if (result.status() != AgentRunStatus.COMPLETED) {
+            return;
+        }
+        // 纯日志版最小 Evaluation 走异步 judge 调用，避免把额外一次模型评估阻塞到主回答链路上。
+        answerEvaluationService.evaluateAsync(requestContext, request.message(), assistantMessage);
+    }
 }

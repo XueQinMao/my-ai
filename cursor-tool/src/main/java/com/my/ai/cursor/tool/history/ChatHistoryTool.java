@@ -1,10 +1,9 @@
 package com.my.ai.cursor.tool.history;
 
-import com.my.ai.cursor.ai.platform.application.pojo.context.AgentExecutionContext;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentExecutionRecorderDto;
+import com.my.ai.cursor.ai.platform.application.context.AgentContext;
+import com.my.ai.cursor.ai.platform.application.pojo.AgentRunTracker;
 import com.my.ai.cursor.chat.application.ChatMessageService;
 import com.my.ai.cursor.chat.application.pojo.req.ChatHistoryQueryRequest;
-import com.my.ai.cursor.chat.infrastructure.service.ChatSessionService;
 import com.my.ai.cursor.common.annotation.AgentToolGroup;
 import com.my.ai.cursor.tool.model.dto.ToolResult;
 import com.my.ai.cursor.tool.support.AbstractAgentTool;
@@ -26,8 +25,8 @@ public class ChatHistoryTool extends AbstractAgentTool {
 
     private final ChatMessageService chatMessageService;
 
-    public ChatHistoryTool(AgentExecutionRecorderDto agentExecutionRecorderDto, ChatMessageService chatMessageService) {
-        super(agentExecutionRecorderDto);
+    public ChatHistoryTool(AgentRunTracker agentRunTracker, ChatMessageService chatMessageService) {
+        super(agentRunTracker);
         this.chatMessageService = chatMessageService;
     }
 
@@ -43,7 +42,7 @@ public class ChatHistoryTool extends AbstractAgentTool {
         @ToolParam(description = "最近历史条数，建议 1 到 10") Integer limit) {
         return executeReadonlyTool("getRecentHistory", Map.of("limit",  limit), "history", () -> {
             log.info("tool getRecentHistory limit {}", limit);
-            AgentExecutionContext context = currentContext();
+            AgentContext context = currentContext();
             // sessionId 同样从运行上下文读取，避免模型任意查询其他会话的聊天记录。
             if (context == null || !StringUtils.hasText(context.sessionId())) {
                 throw new IllegalStateException("Current agent run does not contain sessionId");

@@ -3,8 +3,9 @@ package com.my.ai.cursor.memory.application;
 import com.my.ai.cursor.ai.platform.application.VectorStoreRouter;
 import com.my.ai.cursor.memory.domain.MemoryRepository;
 import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
-import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteCommand;
+import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteDto;
 import com.my.ai.cursor.memory.pojo.dto.MemoryItemDto;
+import com.my.ai.cursor.memory.pojo.req.MemoryDeleteRequest;
 import com.my.ai.cursor.memory.pojo.req.MemoryQueryRequest;
 import jakarta.annotation.Resource;
 import org.springframework.ai.document.Document;
@@ -43,9 +44,9 @@ public class LongTermMemoryService {
                 .collect(Collectors.toSet());
 
         // 长期记忆不是原始消息直存，而是先提炼成可复用的记忆条目再落库。
-        ChatMemoryWriteCommand command =
-            new ChatMemoryWriteCommand(userId, sessionId, sourceMessageId, userMessage, assistantMessage);
-        List<AgentMemory> memories = memoryExtractionService.extract(command, normalizedKeySet);
+        ChatMemoryWriteDto memoryWriteDto =
+            new ChatMemoryWriteDto(userId, sessionId, sourceMessageId, userMessage, assistantMessage);
+        List<AgentMemory> memories = memoryExtractionService.extract(memoryWriteDto, normalizedKeySet);
         //存向量 为了事务
         LongTermMemoryService bean = applicationContext.getBean(LongTermMemoryService.class);
         bean.store(memories);
@@ -72,7 +73,7 @@ public class LongTermMemoryService {
         return memoryRepository.query(request).stream().map(this::toDto).toList();
     }
 
-    public void forget(com.my.ai.cursor.application.dto.memory.MemoryDeleteRequest request) {
+    public void forget(MemoryDeleteRequest request) {
         memoryRepository.expire(request.userId(), request.memoryId());
     }
 

@@ -1,8 +1,9 @@
 package com.my.ai.cursor.tool.support;
 
 import com.alibaba.fastjson.JSON;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentExecutionRecorderDto;
-import com.my.ai.cursor.ai.platform.application.pojo.context.AgentExecutionContext;
+import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.ai.platform.application.pojo.AgentRunTracker;
+import com.my.ai.cursor.ai.platform.application.context.AgentContext;
 import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentToolCallHandleDto;
 import com.my.ai.cursor.tool.model.dto.ToolMetadata;
 import com.my.ai.cursor.tool.model.dto.ToolResult;
@@ -16,16 +17,16 @@ public abstract class AbstractAgentTool {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final AgentExecutionRecorderDto agentExecutionRecorderDto;
+    private final AgentRunTracker agentRunTracker;
 
     private static final int MAX_SUMMARY_LENGTH = 240;
 
-    protected AbstractAgentTool(AgentExecutionRecorderDto agentExecutionRecorderDto) {
-        this.agentExecutionRecorderDto = agentExecutionRecorderDto;
+    protected AbstractAgentTool(AgentRunTracker agentRunTracker) {
+        this.agentRunTracker = agentRunTracker;
     }
 
-    protected AgentExecutionContext currentContext() {
-        return agentExecutionRecorderDto.currentContext();
+    protected AgentContext currentContext() {
+        return agentRunTracker.currentContext();
     }
 
     protected ToolMetadata readonlyMetadata(String scope) {
@@ -35,19 +36,29 @@ public abstract class AbstractAgentTool {
     protected <T> ToolResult<T> executeReadonlyTool(String toolName, Map<String, Object>argumentsSummary, String scope,
         Supplier<T> supplier) {
         ToolMetadata metadata = readonlyMetadata(scope);
+        AgentContext context = currentContext();
         AgentToolCallHandleDto handle =
-            currentContext() != null ? agentExecutionRecorderDto.beginToolCall(toolName, null == argumentsSummary?"": JSON.toJSONString(argumentsSummary)) : null;
+            context != null ? agentRunTracker.beginToolCall(toolName,
+                null == argumentsSummary ? "" : JSON.toJSONString(argumentsSummary)) : null;
+        long startedAtNanos = System.nanoTime();
         T result;
         try {
-             result = supplier.get();
+            result = supplier.get();
+            long durationMs = elapsedMs(startedAtNanos);
             if (handle != null) {
-                agentExecutionRecorderDto.recordSuccess(handle, summarize(result));
+                agentRunTracker.recordSuccess(handle, summarize(result));
             }
+            AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName, "SUCCESS",
+                durationMs);
             return ToolResult.success(toolName, result, metadata);
         } catch (Exception e) {
+            long durationMs = elapsedMs(startedAtNanos);
             if (handle != null) {
-                agentExecutionRecorderDto.recordFailure(handle, e);
+                agentRunTracker.recordFailure(handle, e);
             }
+            AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName, "FAILED",
+                durationMs);
+            log.warn("Tool execution failed. toolName={}, scope={}", toolName, scope, e);
             return ToolResult.failure(toolName, metadata, "TOOL_EXECUTION_FAILED", e.getMessage(), false);
         }
     }
@@ -58,5 +69,9 @@ public abstract class AbstractAgentTool {
         }
         String text = String.valueOf(value);
         return text.length() > MAX_SUMMARY_LENGTH ? text.substring(0, MAX_SUMMARY_LENGTH) : text;
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 }

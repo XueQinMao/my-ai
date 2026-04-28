@@ -15,10 +15,12 @@ public class ChatClientRouter {
 
     public ChatClientRouter(@Qualifier("normalChatClient") ChatClient normalChatClient,
         @Qualifier("reasoningChatClient") ChatClient reasoningChatClient,
-        @Qualifier("ragCleaningChatClient") ChatClient ragCleaningChatClient) {
+        @Qualifier("ragCleaningChatClient") ChatClient ragCleaningChatClient,
+        @Qualifier("evalJudgeChatClient") ChatClient evalJudgeChatClient) {
         this.chatClients = Map.ofEntries(Map.entry(AiScene.AGENT_CHAT, reasoningChatClient),
             Map.entry(AiScene.NORMAL_CHAT, normalChatClient), Map.entry(AiScene.RAG_CLEANING, ragCleaningChatClient),
-            Map.entry(AiScene.MEMORY_EXTRACTION, ragCleaningChatClient));
+            Map.entry(AiScene.MEMORY_EXTRACTION, ragCleaningChatClient),
+            Map.entry(AiScene.EVALUATION_CHAT, evalJudgeChatClient));
     }
 
     public ChatClient route(AiScene scene) {

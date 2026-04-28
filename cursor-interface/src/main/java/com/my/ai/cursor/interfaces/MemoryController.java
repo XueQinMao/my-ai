@@ -1,10 +1,10 @@
 package com.my.ai.cursor.interfaces;
 
-import com.my.ai.cursor.application.dto.memory.MemoryDeleteRequest;
-import com.my.ai.cursor.application.dto.memory.MemoryQueryRequest;
 import com.my.ai.cursor.interfaces.pojo.vo.Response;
 import com.my.ai.cursor.memory.application.LongTermMemoryService;
 import com.my.ai.cursor.memory.pojo.dto.MemoryItemDto;
+import com.my.ai.cursor.memory.pojo.req.MemoryDeleteRequest;
+import com.my.ai.cursor.memory.pojo.req.MemoryQueryRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

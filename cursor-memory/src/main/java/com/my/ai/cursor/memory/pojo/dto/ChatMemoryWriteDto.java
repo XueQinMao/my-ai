@@ -1,6 +1,6 @@
 package com.my.ai.cursor.memory.pojo.dto;
 
-public record ChatMemoryWriteCommand(
+public record ChatMemoryWriteDto(
     String userId,
     String sessionId,
     Long sourceMessageId,

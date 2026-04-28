@@ -158,6 +158,35 @@ public class ApiServiceConfig {
               """).build();
     }
 
+    @Bean("evalJudgeChatModel")
+    public OpenAiChatModel evalJudgeChatModel(RestClient.Builder ollamaRestClientBuilder) {
+        OpenAiApi openAiApi = OpenAiApi.builder()
+            .baseUrl(openAiBaseUrl)
+            .apiKey(openAiApiKey)
+            .restClientBuilder(ollamaRestClientBuilder)
+            .build();
+        return OpenAiChatModel.builder()
+            .openAiApi(openAiApi)
+            .defaultOptions(
+                // 纯日志版最小 Evaluation 更看重稳定输出，因此用百炼里质量较高且兼容性成熟的 qwen-max，
+                // 并把温度降到较低水平，尽量减少评分漂移。
+                OpenAiChatOptions.builder().model("qwen-max").temperature(0.1).maxTokens(1024).build())
+            .build();
+    }
+
+    @Bean("evalJudgeChatClient")
+    public ChatClient evalJudgeChatClient(@Qualifier("evalJudgeChatModel") OpenAiChatModel evalJudgeChatModel,
+        LlmLogAdvisor llmLogAdvisor) {
+        return ChatClient.builder(evalJudgeChatModel)
+            .defaultAdvisors(llmLogAdvisor)
+            .defaultSystem("""
+                你是一名中文回答质量评估器。
+                你只负责打分，不负责改写答案。
+                请严格输出 JSON，不要输出任何额外说明。
+                """)
+            .build();
+    }
+
     @Bean("reasoningChatClient")
     public ChatClient reasoningChatClient(@Qualifier("normalOpenAiChatModel") OpenAiChatModel reasoningChatModel, LlmLogAdvisor llmLogAdvisor) {
         return ChatClient.builder(reasoningChatModel)

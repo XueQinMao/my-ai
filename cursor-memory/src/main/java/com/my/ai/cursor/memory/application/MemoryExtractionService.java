@@ -7,7 +7,7 @@ import com.my.ai.cursor.common.enums.MemoryStatus;
 import com.my.ai.cursor.common.enums.MemoryType;
 import com.my.ai.cursor.common.utils.DigestUtil;
 import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
-import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteCommand;
+import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteDto;
 import com.my.ai.cursor.memory.pojo.dto.MemoryExtractAiDto;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.template.st.StTemplateRenderer;
@@ -27,7 +27,7 @@ public class MemoryExtractionService {
         this.aiGatewayService = aiGatewayService;
     }
 
-    public List<AgentMemory> extract(ChatMemoryWriteCommand command, Set<String> normalizedKeySet) {
+    public List<AgentMemory> extract(ChatMemoryWriteDto memoryWriteDto, Set<String> normalizedKeySet) {
 
         var promptTemplate = PromptTemplate.builder()
             .renderer(StTemplateRenderer.builder().startDelimiterToken('<').endDelimiterToken('>').build()).template("""
@@ -58,15 +58,15 @@ public class MemoryExtractionService {
                 """).build();
 
         var aiDto = aiGatewayService.chat(AiScene.MEMORY_EXTRACTION, promptTemplate.create(
-                Map.of("userMessage", command.userMessage(), "assistantMessage", command.assistantMessage())),
+                Map.of("userMessage", memoryWriteDto.userMessage(), "assistantMessage", memoryWriteDto.assistantMessage())),
             MemoryExtractAiDto.class);
 
         return Optional.ofNullable(aiDto).map(MemoryExtractAiDto::getMemories).orElse(Collections.emptyList()).stream()
-            .map(memorie -> buildSessionSummary(command, memorie))
+            .map(memorie -> buildSessionSummary(memoryWriteDto, memorie))
             .filter(memory -> !normalizedKeySet.contains(memory.getNormalizedKey())).toList();
     }
 
-    private AgentMemory buildSessionSummary(ChatMemoryWriteCommand command, MemoryExtractAiDto.Memorie memorie) {
+    private AgentMemory buildSessionSummary(ChatMemoryWriteDto command, MemoryExtractAiDto.Memorie memorie) {
         AgentMemory memory = baseMemory(command, Enum.valueOf(MemoryType.class, memorie.getType()),
             DigestUtil.sha256(memorie.getSummary()));
         memory.setContent("本轮用户问题：" + command.userMessage() + "；本轮回答摘要：" + memorie.getSummary());
@@ -77,7 +77,7 @@ public class MemoryExtractionService {
         return memory;
     }
 
-    private AgentMemory extractLanguagePreference(ChatMemoryWriteCommand command) {
+    private AgentMemory extractLanguagePreference(ChatMemoryWriteDto command) {
         String userMessage = command.userMessage();
         if (!StringUtils.hasText(userMessage)) {
             return null;
@@ -96,7 +96,7 @@ public class MemoryExtractionService {
         return null;
     }
 
-    private AgentMemory extractResponseStylePreference(ChatMemoryWriteCommand command) {
+    private AgentMemory extractResponseStylePreference(ChatMemoryWriteDto command) {
         String userMessage = command.userMessage();
         if (!StringUtils.hasText(userMessage)) {
             return null;
@@ -114,7 +114,7 @@ public class MemoryExtractionService {
         return null;
     }
 
-    private AgentMemory preferenceMemory(ChatMemoryWriteCommand command, String normalizedKey, String content,
+    private AgentMemory preferenceMemory(ChatMemoryWriteDto command, String normalizedKey, String content,
         String summary) {
         AgentMemory memory = baseMemory(command, MemoryType.PREFERENCE, normalizedKey);
         memory.setContent(content);
@@ -124,7 +124,7 @@ public class MemoryExtractionService {
         return memory;
     }
 
-    private AgentMemory baseMemory(ChatMemoryWriteCommand command, MemoryType type, String normalizedKey) {
+    private AgentMemory baseMemory(ChatMemoryWriteDto command, MemoryType type, String normalizedKey) {
         LocalDateTime now = LocalDateTime.now();
         AgentMemory memory = new AgentMemory();
         memory.setUserId(command.userId());

@@ -3,8 +3,8 @@ package com.my.ai.cursor.chat.application.event;
 import com.lmax.disruptor.*;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
-import com.my.ai.cursor.ai.platform.application.event.LlmTokenCostEvent;
-import com.my.ai.cursor.ai.platform.application.event.handler.LlmTokenCostEventHandler;
+import com.my.ai.cursor.ai.platform.application.event.LlmCallCompleteEvent;
+import com.my.ai.cursor.ai.platform.application.event.handler.LlmCallCompleteEventHandler;
 import com.my.ai.cursor.chat.application.event.handler.ChatCompleteEventHandler;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -31,12 +31,12 @@ public class DisruptorConfig {
 
     private int ringBufferSize = 1024;
 
-    private Disruptor<LlmTokenCostEvent> llmTokenCostDisruptor;
+    private Disruptor<LlmCallCompleteEvent> llmTokenCostDisruptor;
 
     private Disruptor<ChatCompleteEvent> chatCompleteDisruptor;
 
     @Resource
-    private LlmTokenCostEventHandler llmTokenCostEventHandler;
+    private LlmCallCompleteEventHandler llmCallCompleteEventHandler;
 
     @Resource
     @Lazy
@@ -60,10 +60,10 @@ public class DisruptorConfig {
 
         // 根据配置创建等待策略
         llmTokenCostDisruptor =
-            new Disruptor<>(LlmTokenCostEvent.FACTORY, ringBufferSize, threadFactory, ProducerType.MULTI, // 支持多生产者
+            new Disruptor<>(LlmCallCompleteEvent.FACTORY, ringBufferSize, threadFactory, ProducerType.MULTI, // 支持多生产者
                 createWaitStrategy());
         // 设置事件处理器
-        llmTokenCostDisruptor.handleEventsWith(llmTokenCostEventHandler);
+        llmTokenCostDisruptor.handleEventsWith(llmCallCompleteEventHandler);
         llmTokenCostDisruptor.start();
 
         chatCompleteDisruptor =
@@ -81,7 +81,7 @@ public class DisruptorConfig {
     }
 
     @Bean("llmTokenCostEventDisruptor")
-    public Disruptor<LlmTokenCostEvent> llmTokenCostEventDisruptor() {
+    public Disruptor<LlmCallCompleteEvent> llmTokenCostEventDisruptor() {
         return llmTokenCostDisruptor;
     }
 

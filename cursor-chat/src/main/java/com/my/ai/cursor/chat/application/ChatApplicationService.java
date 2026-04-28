@@ -1,9 +1,14 @@
 package com.my.ai.cursor.chat.application;
 
 import com.lmax.disruptor.dsl.Disruptor;
-import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentExecutionResultDto;
 import com.my.ai.cursor.ai.platform.application.agent.AgentExecutor;
+import com.my.ai.cursor.ai.platform.application.config.AgentRuntimeProperties;
+import com.my.ai.cursor.ai.platform.application.context.AgentContextFactory;
+import com.my.ai.cursor.ai.platform.application.context.RequestContextFactory;
 import com.my.ai.cursor.ai.platform.application.agent.AgentRunStatus;
+import com.my.ai.cursor.ai.platform.application.context.AgentContext;
+import com.my.ai.cursor.ai.platform.application.context.RequestContext;
+import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentRunResult;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import com.my.ai.cursor.chat.application.pojo.resp.AgentChatResponse;
@@ -22,36 +27,46 @@ import java.util.Map;
 public class ChatApplicationService {
 
     private final AgentExecutor agentExecutor;
+
+    private final AgentRuntimeProperties agentRuntimeProperties;
+
     private final AppMemoryProperties appMemoryProperties;
 
     private final ShortTermMemoryService shortTermMemoryService;
 
     private final Disruptor<ChatCompleteEvent> chatCompleteDisruptor;
 
-    public ChatApplicationService(AgentExecutor agentExecutor, AppMemoryProperties appMemoryProperties,
-        ShortTermMemoryService shortTermMemoryService, Disruptor<ChatCompleteEvent> chatCompleteDisruptor) {
+    public ChatApplicationService(AgentExecutor agentExecutor, AgentRuntimeProperties agentRuntimeProperties,
+        AppMemoryProperties appMemoryProperties, ShortTermMemoryService shortTermMemoryService,
+        Disruptor<ChatCompleteEvent> chatCompleteDisruptor) {
         this.agentExecutor = agentExecutor;
+        this.agentRuntimeProperties = agentRuntimeProperties;
         this.appMemoryProperties = appMemoryProperties;
         this.shortTermMemoryService = shortTermMemoryService;
         this.chatCompleteDisruptor = chatCompleteDisruptor;
     }
 
     public AgentChatResponse agentChat(ChatRequest request) {
-        AgentExecutionResultDto result =
-            agentExecutor.execute(request.userId(), request.sessionId(), generatePrompt(request));
-        String assistantMessage = resolveAgentMessage(result);
+        AgentContext context = createAgentContext(request, "http", "chat.agent");
+        AgentRunResult result = agentExecutor.execute(context, generatePrompt(request));
+        String assistant = resolveAgentMessage(result);
         // 先沿用现有聊天落库链路，保证 agent 输出也能进入会话历史和记忆系统。
-        publishChatComplete(request, assistantMessage);
-        return AgentChatResponse.of(result.runId(), request.userId(), request.sessionId(), result.status(),
-            assistantMessage, result.toolTraces(), result.errorMessage());
+        publishChatComplete(request, assistant, result, context.request());
+        return AgentChatResponse.of(result.runId(), request.userId(), request.sessionId(), result.status(), assistant,
+            result.toolTraces(), result.errorMessage());
     }
 
     public Flux<String> agentStreamChat(ChatRequest request) {
-        Prompt prompt = generatePrompt(request);
-        StringBuilder assistantMessage = new StringBuilder();
-        return agentExecutor.stream(request.userId(), request.sessionId(), prompt)
-            .doOnNext(assistantMessage::append)
-            .doOnComplete(() -> publishChatComplete(request, assistantMessage.toString()));
+        return Flux.defer(() -> {
+            AgentContext context = createAgentContext(request, "sse", "chat.agent.stream");
+            AgentRunResult result = agentExecutor.execute(context, generatePrompt(request));
+            if (result.status() == AgentRunStatus.FAILED) {
+                return Flux.error(new IllegalStateException(result.errorMessage()));
+            }
+            String assistantMessage = resolveAgentMessage(result);
+            publishChatComplete(request, assistantMessage, result, context.request());
+            return Flux.just(assistantMessage);
+        });
     }
 
     private Prompt generatePrompt(ChatRequest request) {
@@ -74,7 +89,7 @@ public class ChatApplicationService {
         return promptTemplate.create(Map.of("historyContext", historyContext, "message", request.message()));
     }
 
-    private String resolveAgentMessage(AgentExecutionResultDto result) {
+    private String resolveAgentMessage(AgentRunResult result) {
         if (result.status() == AgentRunStatus.COMPLETED) {
             return result.finalAnswer();
         }
@@ -83,11 +98,22 @@ public class ChatApplicationService {
             : "Agent 执行失败，请稍后重试。";
     }
 
-    private void publishChatComplete(ChatRequest request, String assistantMessage) {
+    private void publishChatComplete(ChatRequest request, String assistantMessage, AgentRunResult result,
+        RequestContext requestContext) {
         chatCompleteDisruptor.getRingBuffer().publishEvent((event, sequence) -> {
-            event.setAssistantMessage(assistantMessage);
+            event.setAssistant(assistantMessage);
             event.setRequest(request);
+            event.setRequestContext(requestContext);
+            event.setAgentRunResult(result);
         });
+    }
+
+    private AgentContext createAgentContext(ChatRequest request, String channel, String source) {
+        RequestContext requestContext =
+            RequestContextFactory.create(AiScene.AGENT_CHAT, request.userId(), request.sessionId(), channel, source);
+        return AgentContextFactory.create(requestContext, request.message(), request.enableKnowledge(),
+            request.enableLongTermMemory(), request.memoryWindow(), agentRuntimeProperties.getMaxSteps(),
+            agentRuntimeProperties.getMaxToolCallsPerRun());
     }
 
     private String defaultContext(String context) {

@@ -66,6 +66,12 @@ app:
   agent:
     max-steps: 6
     max-tool-calls-per-run: 6
+  observability:
+    pricing:
+      models:
+        qwen-max:
+          prompt-cost-per-1k-tokens: ${APP_PRICING_QWEN_MAX_PROMPT:0.02}
+          completion-cost-per-1k-tokens: ${APP_PRICING_QWEN_MAX_COMPLETION:0.06}
   memory:
     short-term:
       enabled: true

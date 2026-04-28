@@ -1,6 +1,8 @@
 package com.my.ai.cursor.knowledge.application;
 
 import com.my.ai.cursor.ai.platform.application.AiGatewayService;
+import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.knowledge.application.pojo.req.KnowledgeSearchRequest;
 import com.my.ai.cursor.knowledge.application.pojo.resp.KnowledgeSearchHit;
 import com.my.ai.cursor.knowledge.domain.KnowledgeRepository;
@@ -9,9 +11,9 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class KnowledgeSearchService {
@@ -28,12 +30,21 @@ public class KnowledgeSearchService {
         if (!StringUtils.hasText(request.query())) {
             throw new IllegalArgumentException("query cannot be empty");
         }
+        long startedAtNanos = System.nanoTime();
         int topK = request.topK() == null || request.topK() <= 0 ? 5 : request.topK();
-        SearchRequest.Builder builder = SearchRequest.builder().query(request.query()).topK(topK)
-            .similarityThreshold(Objects.isNull(request.similarityThreshold()) ? 0.7 : request.similarityThreshold());
-        //向量查询
-        List<Document> docs = aiGatewayService.similaritySearch(builder.build());
-        return docs.stream().map(this::convertToHit).toList();
+        Double similarityThreshold = Objects.isNull(request.similarityThreshold()) ? 0.7 : request.similarityThreshold();
+        try {
+            SearchRequest.Builder builder = SearchRequest.builder().query(request.query()).topK(topK)
+                .similarityThreshold(similarityThreshold);
+            List<Document> docs = aiGatewayService.similaritySearch(builder.build());
+            List<KnowledgeSearchHit> hits = docs.stream().map(this::convertToHit).toList();
+            int hitCount = hits.size();
+            AiMetricsRecorder.recordRagRetrieve(AiScene.AGENT_CHAT.name(), "SUCCESS", elapsedMs(startedAtNanos), hitCount);
+            return hits;
+        } catch (Exception e) {
+            AiMetricsRecorder.recordRagRetrieve(AiScene.AGENT_CHAT.name(), "FAILED", elapsedMs(startedAtNanos), 0);
+            throw e;
+        }
     }
 
     private KnowledgeSearchHit convertToHit(Document doc) {
@@ -58,5 +69,9 @@ public class KnowledgeSearchService {
 
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 }
