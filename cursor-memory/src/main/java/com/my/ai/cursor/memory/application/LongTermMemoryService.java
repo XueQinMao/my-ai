@@ -1,6 +1,9 @@
 package com.my.ai.cursor.memory.application;
 
 import com.my.ai.cursor.ai.platform.application.VectorStoreRouter;
+import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.common.enums.AgentTaskType;
+import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.memory.domain.MemoryRepository;
 import com.my.ai.cursor.memory.infrastructure.entity.AgentMemory;
 import com.my.ai.cursor.memory.pojo.dto.ChatMemoryWriteDto;
@@ -37,7 +40,9 @@ public class LongTermMemoryService {
 
     public void extractAndStore(String userId, String sessionId, Long sourceMessageId, String userMessage,
         String assistantMessage) {
-
+        AiMetricsRecorder.recordMemoryAction(AiScene.MEMORY_EXTRACTION.name(), userId, sessionId,
+            AgentTaskType.MEMORY_MAINTENANCE, "EXTRACT_REQUESTED", "STARTED", 0,
+            "sourceMessageId=%s".formatted(sourceMessageId), null, null);
         List<AgentMemory> byUserId = memoryRepository.getByUserId(userId);
         Set<String> normalizedKeySet =
             Optional.ofNullable(byUserId).orElse(Collections.emptyList()).stream().map(AgentMemory::getNormalizedKey)
@@ -47,6 +52,9 @@ public class LongTermMemoryService {
         ChatMemoryWriteDto memoryWriteDto =
             new ChatMemoryWriteDto(userId, sessionId, sourceMessageId, userMessage, assistantMessage);
         List<AgentMemory> memories = memoryExtractionService.extract(memoryWriteDto, normalizedKeySet);
+        AiMetricsRecorder.recordMemoryAction(AiScene.MEMORY_EXTRACTION.name(), userId, sessionId,
+            AgentTaskType.MEMORY_MAINTENANCE, "EXTRACT_COMPLETED", "SUCCESS", memories.size(),
+            "dedupBase=%s".formatted(normalizedKeySet.size()), null, null);
         //存向量 为了事务
         LongTermMemoryService bean = applicationContext.getBean(LongTermMemoryService.class);
         bean.store(memories);
@@ -54,11 +62,18 @@ public class LongTermMemoryService {
 
     @Transactional
     public void store(List<AgentMemory> memories) {
-        if(memories.isEmpty()){
+        if (memories.isEmpty()) {
+            AiMetricsRecorder.recordMemoryAction(AiScene.MEMORY_EXTRACTION.name(), null, null,
+                AgentTaskType.MEMORY_MAINTENANCE, "STORE_SKIPPED", "SKIPPED", 0, "No extracted memories", null, null);
             return;
         }
         vectorStoreRouter.route().add(memories.stream().map(convertToDocument()).toList());
         memories.forEach(memoryRepository::save);
+        AgentMemory firstMemory = memories.getFirst();
+        AiMetricsRecorder.recordMemoryAction(AiScene.MEMORY_EXTRACTION.name(), firstMemory.getUserId(),
+            firstMemory.getSessionId(), AgentTaskType.MEMORY_MAINTENANCE, "STORE_COMPLETED", "SUCCESS",
+            memories.size(), "memoryTypes=%s".formatted(memories.stream().map(AgentMemory::getMemoryType).distinct().toList()),
+            null, null);
     }
 
     private Function<AgentMemory, Document> convertToDocument() {
@@ -75,6 +90,9 @@ public class LongTermMemoryService {
 
     public void forget(MemoryDeleteRequest request) {
         memoryRepository.expire(request.userId(), request.memoryId());
+        AiMetricsRecorder.recordMemoryAction(AiScene.AGENT_CHAT.name(), request.userId(), null,
+            AgentTaskType.MEMORY_MAINTENANCE, "FORGET", "SUCCESS", 1,
+            "memoryId=%s".formatted(request.memoryId()), null, null);
     }
 
     private MemoryItemDto toDto(AgentMemory memory) {

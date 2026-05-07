@@ -104,9 +104,9 @@ public class LlmLogAdvisor implements CallAdvisor, StreamAdvisor {
         }
         RequestContext requestContext = llmCallContext.request();
         logger.info(
-            "llm request. callId={}, requestId={}, runId={}, scene={}, userId={}, sessionId={}, channel={}, request={}",
+            "llm request. callId={}, requestId={}, runId={}, scene={}, userId={}, sessionId={}, channel={}, systemMessage={}, userMessage ={}",
             llmCallContext.callId(), requestContext.requestId(), requestContext.runId(), requestContext.scene(),
-            requestContext.userId(), requestContext.sessionId(), requestContext.channel(), request);
+            requestContext.userId(), requestContext.sessionId(), requestContext.channel(), request.prompt().getSystemMessage().getText(),request.prompt().getUserMessage().getText());
     }
 
     private void logResponse(ChatClientResponse chatClientResponse, LlmCallContext llmCallContext) {

@@ -8,10 +8,12 @@ import com.my.ai.cursor.ai.platform.application.context.RequestContextFactory;
 import com.my.ai.cursor.ai.platform.application.agent.AgentRunStatus;
 import com.my.ai.cursor.ai.platform.application.context.AgentContext;
 import com.my.ai.cursor.ai.platform.application.context.RequestContext;
+import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
 import com.my.ai.cursor.ai.platform.application.pojo.dto.AgentRunResult;
 import com.my.ai.cursor.chat.application.event.ChatCompleteEvent;
 import com.my.ai.cursor.chat.application.pojo.req.ChatRequest;
 import com.my.ai.cursor.chat.application.pojo.resp.AgentChatResponse;
+import com.my.ai.cursor.common.enums.AgentTaskType;
 import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.memory.application.ShortTermMemoryService;
 import com.my.ai.cursor.memory.application.config.AppMemoryProperties;
@@ -111,12 +113,42 @@ public class ChatApplicationService {
     private AgentContext createAgentContext(ChatRequest request, String channel, String source) {
         RequestContext requestContext =
             RequestContextFactory.create(AiScene.AGENT_CHAT, request.userId(), request.sessionId(), channel, source);
+        AgentTaskType taskType = classifyTaskType(request);
         return AgentContextFactory.create(requestContext, request.message(), request.enableKnowledge(),
             request.enableLongTermMemory(), request.memoryWindow(), agentRuntimeProperties.getMaxSteps(),
-            agentRuntimeProperties.getMaxToolCallsPerRun());
+            agentRuntimeProperties.getMaxToolCallsPerRun(), taskType);
     }
 
     private String defaultContext(String context) {
         return StringUtils.hasText(context) ? context : "无";
+    }
+
+    private AgentTaskType classifyTaskType(ChatRequest request) {
+        if (request != null && StringUtils.hasText(request.message())) {
+            String normalized = request.message().toLowerCase();
+            if (normalized.contains("忘记") || normalized.contains("删除记忆") || normalized.contains("清除记忆")) {
+                return AgentTaskType.MEMORY_MAINTENANCE;
+            }
+            if (normalized.contains("知识库") || normalized.contains("文档") || normalized.contains("入库")
+                || normalized.contains("整理资料")) {
+                return AgentTaskType.KNOWLEDGE_CURATION;
+            }
+            if (normalized.contains("偏好") || normalized.contains("记住") || normalized.contains("我的习惯")) {
+                return AgentTaskType.PERSONALIZED_ANSWER;
+            }
+        }
+        if (request != null && Boolean.TRUE.equals(request.enableLongTermMemory())) {
+            return AgentTaskType.PERSONALIZED_ANSWER;
+        }
+        if (request != null && Boolean.TRUE.equals(request.enableKnowledge())) {
+            return AgentTaskType.FACT_ANSWER;
+        }
+        return AgentTaskType.GENERAL_ASSISTANCE;
+    }
+
+    private String buildPlanSummary(AgentContext context) {
+        return "tool_calling_loop[channel=%s, source=%s, enableKnowledge=%s, enableLongTermMemory=%s]".formatted(
+            context.request().channel(), context.request().source(), context.enableKnowledge(),
+            context.enableLongTermMemory());
     }
 }

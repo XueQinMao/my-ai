@@ -2,6 +2,7 @@ package com.my.ai.cursor.knowledge.application;
 
 import com.my.ai.cursor.ai.platform.application.AiGatewayService;
 import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.common.enums.AgentTaskType;
 import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.knowledge.application.pojo.req.KnowledgeSearchRequest;
 import com.my.ai.cursor.knowledge.application.pojo.resp.KnowledgeSearchHit;
@@ -40,9 +41,13 @@ public class KnowledgeSearchService {
             List<KnowledgeSearchHit> hits = docs.stream().map(this::convertToHit).toList();
             int hitCount = hits.size();
             AiMetricsRecorder.recordRagRetrieve(AiScene.AGENT_CHAT.name(), "SUCCESS", elapsedMs(startedAtNanos), hitCount);
+            AiMetricsRecorder.recordKnowledgeAction(AiScene.AGENT_CHAT.name(), null, null, AgentTaskType.FACT_ANSWER,
+                "SEARCH", "SUCCESS", elapsedMs(startedAtNanos), hitCount, similarityThreshold, request.query());
             return hits;
         } catch (Exception e) {
             AiMetricsRecorder.recordRagRetrieve(AiScene.AGENT_CHAT.name(), "FAILED", elapsedMs(startedAtNanos), 0);
+            AiMetricsRecorder.recordKnowledgeAction(AiScene.AGENT_CHAT.name(), null, null, AgentTaskType.FACT_ANSWER,
+                "SEARCH", "FAILED", elapsedMs(startedAtNanos), 0, similarityThreshold, request.query());
             throw e;
         }
     }

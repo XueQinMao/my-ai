@@ -2,6 +2,8 @@ package com.my.ai.cursor.memory.application;
 
 import com.alibaba.fastjson2.JSON;
 import com.my.ai.cursor.ai.platform.application.AiGatewayService;
+import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.common.enums.AgentTaskType;
 import com.my.ai.cursor.common.enums.AiScene;
 import com.my.ai.cursor.common.enums.MemoryStatus;
 import com.my.ai.cursor.common.enums.MemoryType;
@@ -28,7 +30,8 @@ public class MemoryExtractionService {
     }
 
     public List<AgentMemory> extract(ChatMemoryWriteDto memoryWriteDto, Set<String> normalizedKeySet) {
-
+        Set<String> safeNormalizedKeySet = normalizedKeySet == null ? Collections.emptySet() : normalizedKeySet;
+        int dedupBaseSize = safeNormalizedKeySet.size();
         var promptTemplate = PromptTemplate.builder()
             .renderer(StTemplateRenderer.builder().startDelimiterToken('<').endDelimiterToken('>').build()).template("""
                 你是记忆提取专家。请分析以下对话，提取所有有价值的长期记忆。
@@ -61,9 +64,17 @@ public class MemoryExtractionService {
                 Map.of("userMessage", memoryWriteDto.userMessage(), "assistantMessage", memoryWriteDto.assistantMessage())),
             MemoryExtractAiDto.class);
 
-        return Optional.ofNullable(aiDto).map(MemoryExtractAiDto::getMemories).orElse(Collections.emptyList()).stream()
+        List<AgentMemory> extracted = Optional.ofNullable(aiDto).map(MemoryExtractAiDto::getMemories)
+            .orElse(Collections.emptyList()).stream()
             .map(memorie -> buildSessionSummary(memoryWriteDto, memorie))
-            .filter(memory -> !normalizedKeySet.contains(memory.getNormalizedKey())).toList();
+            .filter(memory -> !safeNormalizedKeySet.contains(memory.getNormalizedKey())).toList();
+        int rawCount = Optional.ofNullable(aiDto).map(MemoryExtractAiDto::getMemories).orElse(Collections.emptyList())
+            .size();
+        AiMetricsRecorder.recordMemoryAction(AiScene.MEMORY_EXTRACTION.name(), memoryWriteDto.userId(),
+            memoryWriteDto.sessionId(), AgentTaskType.MEMORY_MAINTENANCE, "EXTRACT_FILTERED", "SUCCESS",
+            extracted.size(), "rawCount=%s,dedupBase=%s,skipped=%s".formatted(rawCount, dedupBaseSize,
+                Math.max(rawCount - extracted.size(), 0)), null, null);
+        return extracted;
     }
 
     private AgentMemory buildSessionSummary(ChatMemoryWriteDto command, MemoryExtractAiDto.Memorie memorie) {

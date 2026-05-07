@@ -37,6 +37,12 @@ public abstract class AbstractAgentTool {
         Supplier<T> supplier) {
         ToolMetadata metadata = readonlyMetadata(scope);
         AgentContext context = currentContext();
+        int stepNo = context == null ? 0 : agentRunTracker.currentToolCallCount() + 1;
+        if (context != null) {
+            AiMetricsRecorder.recordToolDecision(context.request(), context.taskType(), stepNo, toolName, "EXECUTE",
+                scope, metadata.readonly(), !metadata.requiresApproval(), agentRunTracker.currentToolCallCount(),
+                context.maxToolCallsPerRun());
+        }
         AgentToolCallHandleDto handle =
             context != null ? agentRunTracker.beginToolCall(toolName,
                 null == argumentsSummary ? "" : JSON.toJSONString(argumentsSummary)) : null;
@@ -48,16 +54,26 @@ public abstract class AbstractAgentTool {
             if (handle != null) {
                 agentRunTracker.recordSuccess(handle, summarize(result));
             }
-            AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName, "SUCCESS",
-                durationMs);
+            if (handle != null) {
+                AiMetricsRecorder.recordToolCall(context.request(), context.taskType(), handle.stepNo(), toolName,
+                    "SUCCESS", durationMs);
+            } else {
+                AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName,
+                    "SUCCESS", durationMs);
+            }
             return ToolResult.success(toolName, result, metadata);
         } catch (Exception e) {
             long durationMs = elapsedMs(startedAtNanos);
             if (handle != null) {
                 agentRunTracker.recordFailure(handle, e);
             }
-            AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName, "FAILED",
-                durationMs);
+            if (handle != null && context != null) {
+                AiMetricsRecorder.recordToolCall(context.request(), context.taskType(), handle.stepNo(), toolName,
+                    "FAILED", durationMs);
+            } else {
+                AiMetricsRecorder.recordToolCall(context == null ? "UNKNOWN" : context.scene().name(), toolName,
+                    "FAILED", durationMs);
+            }
             log.warn("Tool execution failed. toolName={}, scope={}", toolName, scope, e);
             return ToolResult.failure(toolName, metadata, "TOOL_EXECUTION_FAILED", e.getMessage(), false);
         }

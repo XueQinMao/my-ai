@@ -2,10 +2,11 @@ package com.my.ai.cursor.chat.application;
 
 import com.my.ai.cursor.ai.platform.application.AiGatewayService;
 import com.my.ai.cursor.ai.platform.application.context.ContextRunner;
-import com.my.ai.cursor.ai.platform.application.context.RequestContextFactory;
 import com.my.ai.cursor.ai.platform.application.context.RequestContext;
+import com.my.ai.cursor.ai.platform.application.context.RequestContextFactory;
 import com.my.ai.cursor.chat.application.pojo.dto.AnswerEvaluationResultDto;
 import com.my.ai.cursor.ai.platform.application.observability.AiMetricsRecorder;
+import com.my.ai.cursor.common.enums.AgentTaskType;
 import com.my.ai.cursor.common.enums.AiScene;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,14 +24,10 @@ public class AnswerEvaluationService {
 
     private final AiGatewayService aiGatewayService;
 
-    private final RequestContextFactory requestContextFactory;
-
     private final ContextRunner contextRunner;
 
-    public AnswerEvaluationService(AiGatewayService aiGatewayService, RequestContextFactory requestContextFactory,
-        ContextRunner contextRunner) {
+    public AnswerEvaluationService(AiGatewayService aiGatewayService, ContextRunner contextRunner) {
         this.aiGatewayService = aiGatewayService;
-        this.requestContextFactory = requestContextFactory;
         this.contextRunner = contextRunner;
     }
 
@@ -85,9 +82,15 @@ public class AnswerEvaluationService {
                         evalRequestContext.sessionId());
                     return;
                 }
-                AiMetricsRecorder.recordEvalResult(AiScene.EVALUATION_CHAT.name(), defaultGrade(result.finalGrade()),
-                    defaultScore(result.finalScore()), result.relevance(), result.helpfulness(), result.clarity(),
-                    result.safety(), result.reason(), evalRequestContext.userId(), evalRequestContext.sessionId());
+                AgentTaskType taskType = resolveTaskType(parentContext);
+                String finalGrade = defaultGrade(result.finalGrade());
+                double finalScore = defaultScore(result.finalScore());
+                AiMetricsRecorder.recordEvalResult(evalRequestContext, taskType, "unknown", finalGrade, finalScore,
+                    result.relevance(), result.helpfulness(), result.clarity(), result.safety(), result.reason());
+                if (requiresReview(finalGrade, finalScore)) {
+                    AiMetricsRecorder.recordEvalCase(evalRequestContext, taskType, "LOW_SCORE", finalGrade, finalScore,
+                        result.reason(), true);
+                }
             });
         } catch (Exception e) {
             log.warn("Answer evaluation failed. sessionId={}", parentContext == null ? null : parentContext.sessionId(),
@@ -104,7 +107,15 @@ public class AnswerEvaluationService {
     }
 
     private RequestContext buildEvaluationContext(RequestContext parentContext) {
-        return requestContextFactory.derive(parentContext, AiScene.EVALUATION_CHAT, "internal",
+        return RequestContextFactory.derive(parentContext, AiScene.EVALUATION_CHAT, "internal",
             parentContext == null ? "chat_complete_event" : "chat_complete_event:" + parentContext.runId());
+    }
+
+    private boolean requiresReview(String finalGrade, double finalScore) {
+        return finalScore < 3.5D || "poor".equalsIgnoreCase(finalGrade) || "fair".equalsIgnoreCase(finalGrade);
+    }
+
+    private AgentTaskType resolveTaskType(RequestContext parentContext) {
+        return AgentTaskType.defaultForScene(parentContext == null ? AiScene.AGENT_CHAT : parentContext.scene());
     }
 }

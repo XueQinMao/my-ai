@@ -11,11 +11,24 @@ public record AgentChatResponse(
     String sessionId,
     AgentRunStatus status,
     String content,
+    int totalTasks,
+    long successTaskCount,
+    long failedTaskCount,
     List<AgentToolTraceDto> toolTraces,
     String errorMessage
 ) {
 
-    public static AgentChatResponse of(String runId, String userId, String sessionId, AgentRunStatus status, String content, List<AgentToolTraceDto> toolTraces, String errorMessage) {
-        return new AgentChatResponse(runId, userId, sessionId, status, content, toolTraces, errorMessage);
+    public static AgentChatResponse of(String runId, String userId, String sessionId, AgentRunStatus status, 
+                                       String content, List<AgentToolTraceDto> toolTraces, String errorMessage) {
+        long successCount = toolTraces == null ? 0 : toolTraces.stream()
+            .filter(t -> "SUCCESS".equals(t.status()))
+            .count();
+        long failedCount = toolTraces == null ? 0 : toolTraces.stream()
+            .filter(t -> "FAILED".equals(t.status()))
+            .count();
+        return new AgentChatResponse(runId, userId, sessionId, status, content, 
+                                     toolTraces != null ? toolTraces.size() : 0,
+                                     successCount, failedCount,
+                                     toolTraces, errorMessage);
     }
 }

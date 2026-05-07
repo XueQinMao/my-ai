@@ -119,6 +119,12 @@
                 <artifactId>tess4j</artifactId>
                 <version>${tess4j.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-aop</artifactId>
+                <version>3.5.1</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
